@@ -1,0 +1,5 @@
+# cx-Oracle==8.3.0  # Note: requires Visual C++ build tools on Windows
+supabase==2.4.0
+python-dotenv==1.0.0
+pytest==7.4.0
+pytest-mock==3.11.1
