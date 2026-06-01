@@ -1,6 +1,6 @@
 # ERP → Supabase Sync
 
-Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusiness) para o Supabase PostgreSQL do **AceleraX Agro**. Lê 8 tabelas via views no schema `HUBRAIZ`, transforma as colunas conforme o De/Para da especificação e executa UPSERT idempotente no Supabase.
+Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusiness) para o Supabase PostgreSQL do **AceleraX Agro**. Lê 8 tabelas via views no schema `AGROINSU` (`V_AX_*`), transforma as colunas conforme o De/Para da especificação e executa UPSERT idempotente no Supabase.
 
 ---
 
@@ -9,7 +9,7 @@ Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusine
 - Python 3.9+
 - Oracle Instant Client instalado e no PATH (necessário para `cx_Oracle`)
 - Acesso de rede ao banco Oracle e ao projeto Supabase
-- Usuário `HUBRAIZ` com `GRANT SELECT` nas views de integração criadas pelo DBA
+- Usuário `AGROINSU` com acesso às views `V_AX_*` (já criadas no próprio schema)
 
 ---
 
@@ -91,17 +91,17 @@ O script termina com código `0` (sucesso) ou `1` (alguma tabela teve erro). Tod
 
 A sincronização respeita a ordem de dependência de chaves estrangeiras:
 
-| Ordem | View Oracle (HUBRAIZ) | Tabela Supabase | Chave UPSERT |
-|-------|----------------------|-----------------|--------------|
-| 1 | `V_TRANSAC` | `transac` | `(codi_ten, codi_tra)` |
-| 2 | `V_PROPRIED` | `propried` | `(codi_ten, prop_pro)` |
-| 3 | `V_APEX_GRUPO` | `grupo` | `(codi_ten, codi_gpr)` |
-| 4 | `V_APEX_SUBGRUPO` | `subgrupo` | `(codi_ten, codi_sbg)` |
-| 5 | `V_PRODUTO_PRODSERV` | `prodserv` | `(codi_ten, codi_psv)` |
-| 6 | `V_APEX_CICLO` | `ciclos_safra` | `(codi_ten, nome_csa)` |
-| 7 | `V_EST_CICLO_AF2` | `estoque` | `(codi_ten, codi_pro, codi_fil, codi_csa)` |
-| 8 | `V_VTABELA_SINC` | `tabelas_preco` | `(codi_ten, nome_tab)` |
-| 9 | `V_VTABELA_SINC` | `itens_tabela_preco` | `(codi_tab, codi_pro)` |
+| Ordem | View Oracle (AGROINSU) | Tabela Supabase | Chave UPSERT |
+|-------|------------------------|-----------------|--------------|
+| 1 | `V_AX_CLIENTES` | `transac` | `(codi_ten, codi_tra)` |
+| 2 | `V_AX_PROPRIEDADES` | `propried` | `(codi_ten, prop_pro)` |
+| 3 | `V_AX_GRUPOS` | `grupo` | `(codi_ten, codi_gpr)` |
+| 4 | `V_AX_SUBGRUPOS` | `subgrupo` | `(codi_ten, codi_sbg)` |
+| 5 | `V_AX_PRODUTOS` | `prodserv` | `(codi_ten, codi_psv)` |
+| 6 | `V_AX_CICLOS` | `ciclos_safra` | `(codi_ten, nome_csa)` |
+| 7 | `V_AX_ESTOQUE` | `estoque` | `(codi_ten, codi_pro, codi_fil, codi_csa)` |
+| 8 | `V_AX_TABELA_PRECO` | `tabelas_preco` | `(codi_ten, nome_tab)` |
+| 9 | `V_AX_TABELA_PRECO` | `itens_tabela_preco` | `(codi_tab, codi_pro)` |
 
 ---
 

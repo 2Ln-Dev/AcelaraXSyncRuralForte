@@ -33,6 +33,7 @@ class Config:
         "SUPABASE_URL",
         "SUPABASE_KEY",
         "SYNC_INTERVAL_SECONDS",
+        "CODI_TEN",
     ]
 
     # Integer fields that need to be converted from string to int

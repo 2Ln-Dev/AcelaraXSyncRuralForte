@@ -4,7 +4,7 @@ from logger import Logger
 from oracle_reader import OracleReader, OracleConnectionError
 from supabase_writer import SupabaseWriter, SupabaseAuthError
 from transformer import transform
-from tables_spec import SYNC_ORDER
+from tables_spec import SYNC_ORDER, TABLES_SPEC
 
 
 def run_sync(config, logger, oracle, writer):
@@ -20,6 +20,20 @@ def run_sync(config, logger, oracle, writer):
             continue
 
         transformed = transform(rows, table_name)
+        for row in transformed:
+            row["codi_ten"] = config.codi_ten
+
+        spec = TABLES_SPEC[table_name]
+        if spec.get("is_header"):
+            upsert_key = spec["upsert_key"]
+            seen: set = set()
+            deduped = []
+            for row in transformed:
+                key = tuple(row.get(k) for k in upsert_key)
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append(row)
+            transformed = deduped
 
         try:
             result = writer.upsert_table(table_name, transformed, config.batch_size)

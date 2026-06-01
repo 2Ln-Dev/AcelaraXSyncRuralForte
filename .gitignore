@@ -132,3 +132,9 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Project-specific
+docs/
+*.docx
+*.log
+sync.log

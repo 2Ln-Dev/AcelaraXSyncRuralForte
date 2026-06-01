@@ -43,15 +43,14 @@ def reader(config):
 
 def test_fetch_returns_list_of_dicts(reader):
     cursor = MagicMock()
-    cursor.fetchall.return_value = [("001", "T001", "Cliente A")]
+    cursor.fetchall.return_value = [("T001", "Cliente A", "São Paulo", "SP")]
     reader._conn.cursor.return_value = cursor
 
     rows = reader.fetch("transac")
 
     assert len(rows) == 1
-    assert rows[0]["codi_ten"] == "001"
-    assert rows[0]["codi_tra"] == "T001"
-    assert rows[0]["nome_tra"] == "Cliente A"
+    assert rows[0]["CODI_TRA"] == "T001"
+    assert rows[0]["RAZA_TRA"] == "Cliente A"
 
 
 def test_fetch_executes_correct_sql(reader):
@@ -62,8 +61,8 @@ def test_fetch_executes_correct_sql(reader):
     reader.fetch("transac")
 
     sql_called = cursor.execute.call_args[0][0]
-    assert "HUBRAIZ.V_TRANSAC" in sql_called
-    assert "codi_ten" in sql_called
+    assert "V_AX_CLIENTES" in sql_called
+    assert "CODI_TRA" in sql_called
 
 
 def test_fetch_retries_once_on_db_error(reader):
@@ -93,7 +92,6 @@ def test_fetch_raises_after_two_failures(reader):
 
 
 def test_connect_builds_dsn_and_connects(config):
-    _cx_stub.makedsn.reset_mock()
     _cx_stub.connect.reset_mock()
     mock_conn = MagicMock()
     _cx_stub.connect.return_value = mock_conn
@@ -101,7 +99,10 @@ def test_connect_builds_dsn_and_connects(config):
     reader = OracleReader(config)
     reader.connect()
 
-    _cx_stub.makedsn.assert_called_once_with("localhost", 1521, sid="ORCL")
+    call_kwargs = _cx_stub.connect.call_args.kwargs
+    assert call_kwargs["user"] == "hubraiz"
+    assert "localhost" in call_kwargs["dsn"]
+    assert "1521" in call_kwargs["dsn"]
     _cx_stub.connect.assert_called_once()
     assert reader._conn is mock_conn
 

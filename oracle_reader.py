@@ -4,7 +4,11 @@ from tables_spec import TABLES_SPEC
 try:
     import cx_Oracle
 except ModuleNotFoundError:
-    cx_Oracle = None  # deferred; real runs need Oracle Instant Client installed
+    try:
+        import oracledb as cx_Oracle
+        cx_Oracle.init_oracle_client()  # thick mode — requires Oracle Instant Client in PATH
+    except Exception:
+        cx_Oracle = None
 
 
 RETRY_DELAY = 5
@@ -26,15 +30,15 @@ class OracleReader:
         self._conn = None
 
     def connect(self):
-        dsn = cx_Oracle.makedsn(
-            self.config.oracle_host,
-            self.config.oracle_port,
-            sid=self.config.oracle_sid,
+        dsn = (
+            f"(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)"
+            f"(HOST={self.config.oracle_host})(PORT={self.config.oracle_port})))"
+            f"(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME={self.config.oracle_sid})))"
         )
         self._conn = cx_Oracle.connect(
-            self.config.oracle_user,
-            self.config.oracle_password,
-            dsn,
+            user=self.config.oracle_user,
+            password=self.config.oracle_password,
+            dsn=dsn,
         )
 
     def disconnect(self):

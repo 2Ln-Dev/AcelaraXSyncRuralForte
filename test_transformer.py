@@ -4,20 +4,23 @@ from transformer import transform, _convert_value
 
 
 def test_transform_maps_columns_for_transac():
-    rows = [{"codi_ten": "001", "codi_tra": "T001", "nome_tra": "Cliente A"}]
+    rows = [{"CODI_TRA": "T001", "RAZA_TRA": "Cliente A", "DESC_MUN": "São Paulo", "ESTA_MUN": "SP"}]
     result = transform(rows, "transac")
-    assert result == [{"codi_ten": "001", "codi_tra": "T001", "nome_tra": "Cliente A"}]
+    assert result[0]["codi_tra"] == "T001"
+    assert result[0]["raza_tra"] == "Cliente A"
+    assert "CODI_TRA" not in result[0]
 
 
 def test_transform_renames_column_for_tabelas_preco():
-    rows = [{"codi_ten": "001", "id_ctab": 42, "nome_tab": "Lista 2026"}]
+    rows = [{"ID_CTAB": 42, "NOME": "Lista 2026", "SITU_CTAB": "A", "ORIGEM": "M"}]
     result = transform(rows, "tabelas_preco")
     assert result[0]["codi_tab"] == 42
-    assert "id_ctab" not in result[0]
+    assert result[0]["nome_tab"] == "Lista 2026"
+    assert "ID_CTAB" not in result[0]
 
 
 def test_transform_handles_null_values():
-    rows = [{"codi_ten": "001", "codi_tra": None, "nome_tra": "X"}]
+    rows = [{"CODI_TRA": None, "RAZA_TRA": "X", "DESC_MUN": None, "ESTA_MUN": None}]
     result = transform(rows, "transac")
     assert result[0]["codi_tra"] is None
 
@@ -48,8 +51,8 @@ def test_transform_returns_empty_list_for_empty_input():
 
 def test_transform_multiple_rows():
     rows = [
-        {"codi_ten": "001", "codi_tra": "T001", "nome_tra": "A"},
-        {"codi_ten": "001", "codi_tra": "T002", "nome_tra": "B"},
+        {"CODI_TRA": "T001", "RAZA_TRA": "A", "DESC_MUN": "SP", "ESTA_MUN": "SP"},
+        {"CODI_TRA": "T002", "RAZA_TRA": "B", "DESC_MUN": "RJ", "ESTA_MUN": "RJ"},
     ]
     result = transform(rows, "transac")
     assert len(result) == 2

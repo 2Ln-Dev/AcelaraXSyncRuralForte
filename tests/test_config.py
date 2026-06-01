@@ -18,6 +18,7 @@ ORACLE_PASSWORD=testpass
 SUPABASE_URL=https://test.supabase.co
 SUPABASE_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=3600
+CODI_TEN=tenant-test-001
 LOG_FILE_PATH=./test.log
 BATCH_SIZE=1000
 LOG_LEVEL=INFO
@@ -43,6 +44,7 @@ LOG_LEVEL=INFO
         assert config.supabase_key == "test_key_123"
         assert config.sync_interval_seconds == 3600
         assert isinstance(config.sync_interval_seconds, int)
+        assert config.codi_ten == "tenant-test-001"
         assert config.log_file_path == "./test.log"
         assert config.batch_size == 1000
         assert config.log_level == "INFO"
@@ -123,6 +125,7 @@ ORACLE_PASSWORD=testpass
 SUPABASE_URL=https://test.supabase.co
 SUPABASE_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=3600
+CODI_TEN=tenant-test-001
 """
         # Omit optional fields: LOG_FILE_PATH, BATCH_SIZE, LOG_LEVEL
         env_file = tmp_path / ".env"
