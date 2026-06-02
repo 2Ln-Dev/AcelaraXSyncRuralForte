@@ -24,6 +24,33 @@ def run_sync(config, logger, oracle, writer):
             row["codi_ten"] = config.codi_ten
 
         spec = TABLES_SPEC[table_name]
+        if spec.get("is_items"):
+            # Resolve FK to the header: the ERP only knows erp_id (ID_CTAB),
+            # but the items must store the header's internal codi_tab (UUID).
+            id_map = writer.fetch_key_map(
+                spec["header_table"],
+                key_col=spec["link_from"],
+                val_col=spec["link_to"],
+                codi_ten=config.codi_ten,
+            )
+            linked = []
+            orphans = 0
+            for row in transformed:
+                codi_tab = id_map.get(row.get(spec["link_from"]))
+                if codi_tab is None:
+                    orphans += 1
+                    continue
+                row[spec["link_to"]] = codi_tab
+                linked.append(row)
+            if orphans:
+                logger.error(
+                    table=table_name,
+                    error_type="orphan_items",
+                    detail=f"{orphans} itens sem tabela de preco correspondente (erp_id sem header)",
+                )
+                exit_code = 1
+            transformed = linked
+
         if spec.get("is_header"):
             upsert_key = spec["upsert_key"]
             seen: set = set()

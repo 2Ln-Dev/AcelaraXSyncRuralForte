@@ -14,7 +14,7 @@ def test_transform_maps_columns_for_transac():
 def test_transform_renames_column_for_tabelas_preco():
     rows = [{"ID_CTAB": 42, "NOME": "Lista 2026", "SITU_CTAB": "A", "ORIGEM": "M"}]
     result = transform(rows, "tabelas_preco")
-    assert result[0]["codi_tab"] == 42
+    assert result[0]["erp_id"] == 42
     assert result[0]["nome_tab"] == "Lista 2026"
     assert "ID_CTAB" not in result[0]
 

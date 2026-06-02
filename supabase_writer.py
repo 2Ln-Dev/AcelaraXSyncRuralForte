@@ -22,6 +22,22 @@ class SupabaseWriter:
     def connect(self):
         self._client = create_client(self.config.supabase_url, self.config.supabase_key)
 
+    def fetch_key_map(self, supabase_table, key_col, val_col, codi_ten):
+        """Return {key_col: val_col} for a tenant — used to resolve FK links
+        (e.g. erp_id -> codi_tab from tabelas_preco)."""
+        resp = (
+            self._client.table(supabase_table)
+            .select(f"{key_col},{val_col}")
+            .eq("codi_ten", codi_ten)
+            .execute()
+        )
+        rows = resp.data or []
+        return {
+            r[key_col]: r[val_col]
+            for r in rows
+            if r.get(key_col) is not None and r.get(val_col) is not None
+        }
+
     def upsert_batch(self, table_name, rows):
         if not rows:
             return {"upserted": 0, "error": None}
