@@ -93,6 +93,9 @@ TABLES_SPEC = {
             "DESC_PSV": "desc_psv",
             "UNID_PSV": "unid_psv",
             "COMP_PSV": "comp_psv",
+            # O vinculo grupo/segmento se faz por chavegrupo (tabela grupo ja existe
+            # no Supabase). O motor resolve o segmento a partir de chavegrupo/grupo,
+            # entao o sync NAO precisa mandar codi_gpr.
             "CHAVEGRUPO": "chavegrupo",
             "SITU_PSV": "situ_psv",
         }
@@ -115,8 +118,39 @@ TABLES_SPEC = {
         "columns": {
             "ID_CTAB": "erp_id",
             "NOME": "nome_tab",
+            # Vinculo com a safra e' por codi_cic (chave natural do ERP, igual
+            # fix_unique_keys.sql / Onda 1). O sync NAO resolve codi_csa.
             "CODI_CIC": "codi_cic",
             "SITU_CTAB": "stat_tab",
+            # Parametros de ciclo/cambio (APEX_GER_TABELAS) — etapas 1-4 do motor.
+            "PTAX_VISTA": "pxav_tab",
+            "PTAX_PRAZO": "pxap_tab",
+            "DATA_BASE": "dbas_tab",
+            "VENC_MAX": "vmav_tab",
+            "CORREC_RS": "corr_tab",
+            "CORREC_USS": "coru_tab",
+            "ANTEC_RS": "antr_tab",
+            "ANTEC_USS": "antu_tab",
+            # Margens por segmento (etapas 5 e 8 do motor) — de/para 4 grupos do
+            # ERP -> 4 dos 5 segmentos do motor (confirmado com o Lucas):
+            #   FERT (Fertilizantes) -> Adubos (adu)
+            #   DEF  (Defensivos)    -> Quimico (qui)
+            #   ESP  (Especialidades)-> Nutricao/Micro (nut)
+            #   SEM  (Sementes)      -> Semente (sem)
+            # Corretivos (cor) NAO e' usado no app -> marg/inim/fimm_cor ficam NULL.
+            # Este de/para precisa ser consistente com lib/motor/segmentos.ts (app).
+            "MARGEM_FERT": "marg_adu_tab",
+            "FAIXA_INI_FERT": "inim_adu_tab",
+            "FAIXA_FIM_FERT": "fimm_adu_tab",
+            "MARGEM_DEF": "marg_qui_tab",
+            "FAIXA_INI_DEF": "inim_qui_tab",
+            "FAIXA_FIM_DEF": "fimm_qui_tab",
+            "MARGEM_ESP": "marg_nut_tab",
+            "FAIXA_INI_ESP": "inim_nut_tab",
+            "FAIXA_FIM_ESP": "fimm_nut_tab",
+            "MARGEM_SEM": "marg_sem_tab",
+            "FAIXA_INI_SEM": "inim_sem_tab",
+            "FAIXA_FIM_SEM": "fimm_sem_tab",
         }
     },
     "itens_tabela_preco": {
@@ -130,8 +164,13 @@ TABLES_SPEC = {
         "columns": {
             "ID_CTAB": "erp_id",
             "CODI_PSV": "codi_pro",
-            "CUSTO": "prrs_itp",
+            # Insumos do motor (APEX_ITAB_VIG). CUSTO agora vai para cust_itp;
+            # prrs_itp/prus_itp deixaram de vir do ERP (viram snapshot do app).
+            "CUSTO": "cust_itp",
+            "EMBALAGEM": "emba_itp",
             "ORIGEM": "orig_itp",
+            "ADICIONAL": "adic_itp",
+            "FABRICANTE": "fabr_itp",
         }
     }
 }
