@@ -15,10 +15,9 @@ ORACLE_PORT=1521
 ORACLE_SID=ORCL
 ORACLE_USER=testuser
 ORACLE_PASSWORD=testpass
-SUPABASE_URL=https://test.supabase.co
-SUPABASE_KEY=test_key_123
+ACELERA_API_URL=https://app.teste.com.br
+ACELERA_API_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=3600
-CODI_TEN=tenant-test-001
 LOG_FILE_PATH=./test.log
 BATCH_SIZE=1000
 LOG_LEVEL=INFO
@@ -40,11 +39,10 @@ LOG_LEVEL=INFO
         assert config.oracle_sid == "ORCL"
         assert config.oracle_user == "testuser"
         assert config.oracle_password == "testpass"
-        assert config.supabase_url == "https://test.supabase.co"
-        assert config.supabase_key == "test_key_123"
+        assert config.acelera_api_url == "https://app.teste.com.br"
+        assert config.acelera_api_key == "test_key_123"
         assert config.sync_interval_seconds == 3600
         assert isinstance(config.sync_interval_seconds, int)
-        assert config.codi_ten == "tenant-test-001"
         assert config.log_file_path == "./test.log"
         assert config.batch_size == 1000
         assert config.log_level == "INFO"
@@ -55,8 +53,8 @@ LOG_LEVEL=INFO
 ORACLE_SID=ORCL
 ORACLE_USER=testuser
 ORACLE_PASSWORD=testpass
-SUPABASE_URL=https://test.supabase.co
-SUPABASE_KEY=test_key_123
+ACELERA_API_URL=https://app.teste.com.br
+ACELERA_API_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=3600
 LOG_FILE_PATH=./test.log
 """
@@ -73,6 +71,26 @@ LOG_FILE_PATH=./test.log
 
         assert "ORACLE_PORT" in str(exc_info.value)
 
+    def test_config_missing_api_key(self, tmp_path, monkeypatch):
+        """Test that missing ACELERA_API_KEY raises ConfigError."""
+        env_content = """ORACLE_HOST=localhost
+ORACLE_PORT=1521
+ORACLE_SID=ORCL
+ORACLE_USER=testuser
+ORACLE_PASSWORD=testpass
+ACELERA_API_URL=https://app.teste.com.br
+SYNC_INTERVAL_SECONDS=3600
+"""
+        env_file = tmp_path / ".env"
+        env_file.write_text(env_content)
+        monkeypatch.chdir(env_file.parent)
+        monkeypatch.delenv("ACELERA_API_KEY", raising=False)
+
+        with pytest.raises(ConfigError) as exc_info:
+            Config(env_path=str(env_file))
+
+        assert "ACELERA_API_KEY" in str(exc_info.value)
+
     def test_config_invalid_port(self, tmp_path, monkeypatch):
         """Test that invalid port type raises ConfigError."""
         env_content = """ORACLE_HOST=localhost
@@ -80,8 +98,8 @@ ORACLE_PORT=invalid_port
 ORACLE_SID=ORCL
 ORACLE_USER=testuser
 ORACLE_PASSWORD=testpass
-SUPABASE_URL=https://test.supabase.co
-SUPABASE_KEY=test_key_123
+ACELERA_API_URL=https://app.teste.com.br
+ACELERA_API_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=3600
 LOG_FILE_PATH=./test.log
 """
@@ -101,8 +119,8 @@ ORACLE_PORT=1521
 ORACLE_SID=ORCL
 ORACLE_USER=testuser
 ORACLE_PASSWORD=testpass
-SUPABASE_URL=https://test.supabase.co
-SUPABASE_KEY=test_key_123
+ACELERA_API_URL=https://app.teste.com.br
+ACELERA_API_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=not_a_number
 LOG_FILE_PATH=./test.log
 """
@@ -122,10 +140,9 @@ ORACLE_PORT=1521
 ORACLE_SID=ORCL
 ORACLE_USER=testuser
 ORACLE_PASSWORD=testpass
-SUPABASE_URL=https://test.supabase.co
-SUPABASE_KEY=test_key_123
+ACELERA_API_URL=https://app.teste.com.br
+ACELERA_API_KEY=test_key_123
 SYNC_INTERVAL_SECONDS=3600
-CODI_TEN=tenant-test-001
 """
         # Omit optional fields: LOG_FILE_PATH, BATCH_SIZE, LOG_LEVEL
         env_file = tmp_path / ".env"

@@ -1,6 +1,10 @@
-# ERP → Supabase Sync
+# ERP → AceleraX Sync
 
-Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusiness) para o Supabase PostgreSQL do **AceleraX Agro**. Lê 8 tabelas via views no schema `AGROINSU` (`V_AX_*`), transforma as colunas conforme o De/Para da especificação e executa UPSERT idempotente no Supabase.
+Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusiness) para o **AceleraX Agro** **via API HTTP** (não mais direto no banco). Lê as tabelas-base via views no schema `AGROINSU` (`V_AX_*`), transforma as colunas conforme o De/Para da especificação e faz `POST` nos endpoints de integração do AceleraX, que executam o UPSERT idempotente.
+
+> **Autenticação:** header `X-Api-Key` (uma chave por tenant). O `codi_ten` é
+> resolvido no servidor a partir da chave — o sync **não** envia tenant. Assim o
+> ERP não precisa mais de credencial do banco (`service_role`).
 
 ---
 
@@ -8,7 +12,8 @@ Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusine
 
 - Python 3.9+
 - Oracle Instant Client instalado e no PATH (necessário para `cx_Oracle`)
-- Acesso de rede ao banco Oracle e ao projeto Supabase
+- Acesso de rede ao banco Oracle e à **API publicada do AceleraX**
+- Uma **`X-Api-Key`** da integração (gerada pelo time AceleraX, por tenant)
 - Usuário `AGROINSU` com acesso às views `V_AX_*` (já criadas no próprio schema)
 
 ---
@@ -50,9 +55,9 @@ ORACLE_SID=<SID ou service name>
 ORACLE_USER=hubraiz
 ORACLE_PASSWORD=<senha>
 
-# Supabase
-SUPABASE_URL=https://<projeto>.supabase.co
-SUPABASE_KEY=<service_role_key>
+# AceleraX API (escrita pela API, não mais direto no banco)
+ACELERA_API_URL=https://app.seudominio.com.br   # base publicada, sem barra no fim
+ACELERA_API_KEY=<chave X-Api-Key da integração>  # identifica o tenant
 
 # Sync
 SYNC_INTERVAL_SECONDS=3600
@@ -109,14 +114,15 @@ A sincronização respeita a ordem de dependência de chaves estrangeiras:
 
 ```
 sync.py              ← Orquestrador: carrega config, abre conexões,
-                       itera as tabelas em SYNC_ORDER
+                       itera as entidades (tabela de preço = header+itens)
    │
    ├─ oracle_reader.py   ← Lê dados das views Oracle (SELECT)
    ├─ transformer.py     ← Aplica mapeamento De/Para + conversão de tipos
-   └─ supabase_writer.py ← Executa UPSERT em lotes no Supabase
+   └─ api_writer.py      ← POST nos endpoints /api/v1/integracao/base/** (X-Api-Key)
 
 tables_spec.py       ← Fonte da verdade: views, tabelas destino,
                        chaves UPSERT e mapeamento de colunas por tabela
+api_writer.py        ← Também mapeia entidade → slug do endpoint (ENTITY_TO_SLUG)
 
 config.py            ← Carrega e valida o .env
 logger.py            ← Log estruturado em arquivo (chave:valor por linha)
@@ -124,9 +130,16 @@ logger.py            ← Log estruturado em arquivo (chave:valor por linha)
 
 **Lógica de retry:**
 - Oracle: 1 retry após 5s em caso de timeout/falha de conexão
-- Supabase: 1 retry após 5s em caso de timeout; erro de autenticação interrompe o script imediatamente
+- API: 1 retry após 5s em falha de rede/5xx/429; **401** (chave inválida)
+  interrompe o script imediatamente; erros de gravação (ex.: 422) num lote são
+  reportados e o sync segue (exit 1)
 
-**Para adicionar ou alterar uma tabela**, edite apenas `tables_spec.py` — os módulos de pipeline leem tudo a partir dele.
+**A escrita não usa mais `codi_ten`:** o tenant vem da `X-Api-Key`. A resolução
+`erp_id → codi_tab` da tabela de preço agora é feita no servidor.
+
+**Para adicionar ou alterar uma tabela**, edite `tables_spec.py` (colunas) e, se
+for entidade nova, `ENTITY_TO_SLUG` em `api_writer.py` (o endpoint correspondente
+precisa existir no AceleraX).
 
 ---
 
@@ -143,7 +156,7 @@ python -m pytest test_transformer.py -v
 python -m pytest test_transformer.py::test_transform_renames_column_for_tabelas_preco -v
 ```
 
-Os testes não precisam de Oracle ou Supabase instalados — todas as dependências externas são mockadas.
+Os testes não precisam de Oracle nem da API no ar — todas as dependências externas (Oracle e o `requests`) são mockadas.
 
 ---
 

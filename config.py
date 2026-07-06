@@ -24,16 +24,20 @@ class Config:
     """
 
     # Required fields that must be present in the environment
+    #
+    # A escrita agora é pela API do AceleraX (não mais direto no Supabase):
+    # ACELERA_API_URL = base publicada (ex.: https://app.seudominio.com.br)
+    # ACELERA_API_KEY = chave da integração (header X-Api-Key). O tenant (codi_ten)
+    #                   é resolvido no servidor a partir da chave — não vai daqui.
     REQUIRED_FIELDS = [
         "ORACLE_HOST",
         "ORACLE_PORT",
         "ORACLE_SID",
         "ORACLE_USER",
         "ORACLE_PASSWORD",
-        "SUPABASE_URL",
-        "SUPABASE_KEY",
+        "ACELERA_API_URL",
+        "ACELERA_API_KEY",
         "SYNC_INTERVAL_SECONDS",
-        "CODI_TEN",
     ]
 
     # Integer fields that need to be converted from string to int
