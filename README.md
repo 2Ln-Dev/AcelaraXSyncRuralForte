@@ -52,7 +52,7 @@ copy .env.example .env
 ORACLE_HOST=<IP ou hostname do servidor Oracle>
 ORACLE_PORT=1521
 ORACLE_SID=<SID ou service name>
-ORACLE_USER=hubraiz
+ORACLE_USER=agroinsu
 ORACLE_PASSWORD=<senha>
 
 # AceleraX API (escrita pela API, não mais direto no banco)
@@ -94,19 +94,31 @@ O script termina com código `0` (sucesso) ou `1` (alguma tabela teve erro). Tod
 
 ## Tabelas sincronizadas (Onda 1)
 
-A sincronização respeita a ordem de dependência de chaves estrangeiras:
+A ordem segue o `SYNC_ORDER` de `tables_spec.py` (respeita a dependência de
+chaves entre entidades). Cada entidade vira um `POST` em
+`/api/v1/integracao/base/<slug>`; a chave UPSERT é resolvida no servidor (o
+`codi_ten` vem da `X-Api-Key`, não do corpo).
 
-| Ordem | View Oracle (AGROINSU) | Tabela Supabase | Chave UPSERT |
-|-------|------------------------|-----------------|--------------|
-| 1 | `V_AX_CLIENTES` | `transac` | `(codi_ten, codi_tra)` |
-| 2 | `V_AX_PROPRIEDADES` | `propried` | `(codi_ten, prop_pro)` |
-| 3 | `V_AX_GRUPOS` | `grupo` | `(codi_ten, codi_gpr)` |
-| 4 | `V_AX_SUBGRUPOS` | `subgrupo` | `(codi_ten, codi_sbg)` |
-| 5 | `V_AX_PRODUTOS` | `prodserv` | `(codi_ten, codi_psv)` |
-| 6 | `V_AX_CICLOS` | `ciclos_safra` | `(codi_ten, nome_csa)` |
-| 7 | `V_AX_ESTOQUE` | `estoque` | `(codi_ten, codi_pro, codi_fil, codi_csa)` |
-| 8 | `V_AX_TABELA_PRECO` | `tabelas_preco` | `(codi_ten, nome_tab)` |
-| 9 | `V_AX_TABELA_PRECO` | `itens_tabela_preco` | `(codi_tab, codi_pro)` |
+| Ordem | View Oracle (AGROINSU) | Tabela destino | Slug do endpoint | Chave UPSERT |
+|-------|------------------------|----------------|------------------|--------------|
+| 1 | `V_AX_VENDEDOR` | `vendedor` | `vendedores` | `(codi_ten, codi_pes)` |
+| 2 | `V_AX_CLIENTES` | `transac` | `clientes` | `(codi_ten, codi_tra)` |
+| 3 | `V_AX_PROPRIEDADES` | `propried` | `propriedades` | `(codi_ten, prop_pro)` |
+| 4 | `V_AX_GRUPOS` | `grupo` | `grupos` | `(codi_ten, chavegrupo)` |
+| 5 | `V_AX_PRODUTOS` | `prodserv` | `produtos` | `(codi_ten, codi_psv)` |
+| 6 | `V_AX_CICLOS` | `ciclos_safra` | `ciclos` | `(codi_ten, codi_cic)` |
+| 7 | `V_AX_ESTOQUE` | `estoque` | `estoque` | `(codi_ten, codi_pro, codi_fil)` |
+| 8 | `V_AX_TABELA_PRECO` | `tabelas_preco` | `tabelas-preco` | `(codi_ten, erp_id)` |
+| 9 | `V_AX_ITABELA_PRECO` | `itens_tabela_preco` | `tabelas-preco` | `(codi_ten, erp_id, codi_pro)` |
+| 10 | `V_AX_CONDICAO` | `condicao` | `condicoes` | `(codi_ten, cond_con)` |
+
+> A **tabela de preço** (cabeçalho + itens) vai num **único endpoint**
+> (`tabelas-preco`): o servidor grava os cabeçalhos, resolve `erp_id → codi_tab`
+> e vincula os itens. Itens sem cabeçalho correspondente são reportados como
+> órfãos (o lote segue e o sync termina com exit 1).
+
+> `V_AX_SUBGRUPOS` foi **descontinuada**: o subgrupo passou a viver dentro de
+> `grupo` (coluna `desc_sbg`, chave `chavegrupo`).
 
 ---
 
