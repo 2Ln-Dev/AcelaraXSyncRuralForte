@@ -3,3 +3,6 @@ supabase==2.4.0
 python-dotenv==1.0.0
 pytest==7.4.0
 pytest-mock==3.11.1
+# API de integração (gerar_tabela_api.py)
+fastapi==0.111.0
+uvicorn==0.30.1
