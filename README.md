@@ -92,6 +92,67 @@ O script termina com código `0` (sucesso) ou `1` (alguma tabela teve erro). Tod
 
 ---
 
+## Produção (Vercel) — checklist e solução de problemas
+
+O AceleraX é um app Next.js hospedado na **Vercel**; a integração grava no
+**Supabase**. A rota de integração (`/api/v1/integracao/base/*`) é a **única** que
+usa o cliente `service_role` do Supabase (`createServiceClient()`), então depende
+de configuração própria — separada do app web/mobile. Os tropeços mais comuns:
+
+### 1. `ACELERA_API_URL` = base publicada
+Aponte para a URL publicada, **sem barra no fim** (ex.:
+`https://acelera-x-app.vercel.app`). Se ficar em `localhost`, o POST falha com
+"conexão recusada" e nada é gravado (`ROWS_UPSERTED:0`).
+
+### 2. `SUPABASE_SERVICE_ROLE_KEY` na Vercel (a pegadinha principal)
+Env lida por `createServiceClient()` no servidor. Precisa estar:
+- no environment **Production** da Vercel (não só Preview/Development);
+- no **formato novo do Supabase** (`sb_secret_...`) quando o projeto usa as API
+  keys novas — o **JWT `service_role` legado** (`eyJ...`) é **rejeitado** nesse caso;
+- colada sem aspas/espaço/quebra de linha; a env só vale num **redeploy feito
+  depois** de ela existir naquele escopo.
+
+Sintomas quando está errada:
+- **ausente** → `createClient` lança `supabaseKey is required` → todo POST com
+  chave dá **HTTP 500** (`internal`).
+- **presente porém errada** (projeto errado / JWT legado / anon) → o Supabase
+  rejeita, a busca da chave volta vazia → **HTTP 401**.
+
+> ⚠️ **Mobile/web funcionando NÃO prova que a service-role está OK.** Mobile e web
+> usam a `anon` + Bearer do usuário (outro caminho); só a integração usa a
+> `service_role`. Se o mobile vai mas o sync dá 401/500, o problema é essa env.
+
+### 3. `X-Api-Key` cadastrada no Supabase de produção
+O servidor resolve o tenant procurando `sha256(X-Api-Key)` em
+`integracao_api_keys` (com `ativ_iak = true`). A chave tem que existir **no mesmo
+projeto Supabase que a Vercel usa** (`NEXT_PUBLIC_SUPABASE_URL`) e apontar para o
+`codi_ten` certo. Se não existir/estiver inativa → **HTTP 401**.
+
+### Teste rápido de autenticação (não grava nada)
+```bash
+curl -s -w "\n%{http_code}\n" -X POST \
+  "$ACELERA_API_URL/api/v1/integracao/base/vendedores" \
+  -H "X-Api-Key: <sua-chave>" -H "Content-Type: application/json" \
+  --data '{"items":[]}'
+```
+| Resposta | Significado |
+|----------|-------------|
+| **422** `A lista "items" está vazia.` | ✅ auth OK — pode rodar o sync |
+| **401** `Não autenticado.` | chave não cadastrada/inativa no Supabase de produção |
+| **500** `internal` | `SUPABASE_SERVICE_ROLE_KEY` ausente/errada na Vercel |
+
+Para ver o erro real de um 500, abra os **Runtime Logs** do deploy na Vercel e
+procure a linha `[api] erro não tratado:`.
+
+### Itens órfãos no fim do sync (exit 1 esperado)
+A view de **itens** (`V_AX_ITABELA_PRECO`, fonte `APEX_ITAB_VIG`) pode conter itens
+de tabelas de preço **inativas** que não existem na view de **cabeçalho**
+(`V_AX_TABELA_PRECO`, fonte `VTABELA_SINC`). Sem cabeçalho, esses itens não têm onde
+vincular: são **descartados** e contados como órfãos, e o sync termina com
+`EXIT_CODE:1`. Isso é **esperado** e **não afeta** as tabelas ativas.
+
+---
+
 ## Tabelas sincronizadas (Onda 1)
 
 A ordem segue o `SYNC_ORDER` de `tables_spec.py` (respeita a dependência de
