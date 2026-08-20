@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>PedidoErp.Service</RootNamespace>
+    <AssemblyName>PedidoErp.Service</AssemblyName>
+    <!-- x86 OBRIGATORIO: AGBPedidoVenda.dll e' 32-bit (Delphi). Carregada
+         in-process via P/Invoke, entao o processo TEM que ser x86 (senao WinError
+         193). Oracle.ManagedDataAccess.Core e' 100% gerenciado e roda em x86 sem
+         Instant Client, entao o mesmo processo faz DLL + Oracle (um servico so). -->
+    <PlatformTarget>x86</PlatformTarget>
+    <!-- SqlClient/globalizacao nao entram aqui; mantido false por seguranca com o
+         Oracle managed e cp1252 da DLL. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Versao final (Release): FORCA a licenca — a config de licenca e' fixada no
+       binario (via #if LICENCA_OBRIGATORIA no Program.cs), como no HubPadrao. Em Debug
+       a diretiva nao existe -> a licenca respeita o appsettings (dev sem licenca). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DefineConstants>$(DefineConstants);LICENCA_OBRIGATORIA</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <!-- Driver Oracle 100% gerenciado (sem Instant Client), mesmo do appagroinsumos-net. -->
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.6.1" />
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <!-- cp1252 (a DLL fala ANSI Brasil); em .NET Core precisa do provider extra. -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="Serilog" Version="4.0.2" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <!-- Windows Event Log: SO' eventos importantes do servico (iniciou/parou/licenca/fatal). -->
+    <PackageReference Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+    <!-- Licenciamento 2LN (reuso; feed local 2ln-local no nuget.config). Usado headless
+         via LicenseState (o middleware HTTP UseAppLicensing NAO se aplica ao worker). -->
+    <PackageReference Include="2LN.Licensing" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 2LN.Licensing e' uma lib ASP.NET Core (FrameworkReference). Como este projeto
+         e' Sdk.Worker (nao Web), precisamos referenciar o framework p/ consumir o pacote. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Update="appsettings.Development.example.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>
