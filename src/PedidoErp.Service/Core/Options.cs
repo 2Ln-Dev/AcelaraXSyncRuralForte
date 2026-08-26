@@ -47,6 +47,21 @@ public sealed class PedidoOptions
     /// <summary>Teste: materializa a tabela (gerar-tabela) mas NAO chama a DLL nem marca
     /// integrado. Serve p/ validar a geracao 3b sem gravar pedido no ERP.</summary>
     public bool SkipDll { get; set; }
+
+    /// <summary>
+    /// ETAPA 2 — modo TABELA SOMENTE (Reais/Dolar).
+    ///
+    /// Consome a fila de ANALISE (GET /pedidos/analise: so' R/D aprovados), materializa
+    /// as tabelas de preco no ERP e PARA. Nunca chama a DLL, nunca marca integrado,
+    /// nunca registra erro permanente — o pedido NAO vai para o ERP.
+    ///
+    /// Garantia extra: neste modo a DLL nem chega a ser carregada no processo.
+    ///
+    /// Nao confundir com SkipDll: aquele opera sobre a fila de SINCRONIZACAO (barter) e
+    /// existe para ensaiar o fluxo real; este opera sobre uma fila separada, que os
+    /// dois gates de sincronizacao continuam bloqueando.
+    /// </summary>
+    public bool ModoTabelaSomente { get; set; }
     /// <summary>Teste: processa somente este codi_ped (mira 1 pedido, como o --pedido do Python).</summary>
     public string? Somente { get; set; }
 }

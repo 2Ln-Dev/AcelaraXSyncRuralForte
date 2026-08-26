@@ -103,6 +103,12 @@ WHERE  IV.ID_CTAB = :id_ctab";
 
     private const string QDataVlr = "SELECT DATA_VLR FROM CABTAB WHERE TABE_CTA = :t";
     private const string QIndexadorDesc = "SELECT DESC_IND FROM INDEXADOR WHERE CODI_IND = :i";
+
+    // Indexador de PTAX do ERP — o mesmo que o MergePtax usa. E' a CONDICAO de venda em
+    // dolar que aponta para ele (CONDICAO.CODI_IND), por isso a tabela em US$ precisa
+    // carregar esse indexador para o ERP achar a cotacao.
+    private const string QIndexadorPtax =
+        "SELECT MIN(INDX_PTC) FROM PARAMGERTRC WHERE INDX_PTC IS NOT NULL";
     private const string QProxDataVlr =
         "SELECT DISTINCT TRUNC(DATA_VLR) DV FROM INDVALOR WHERE CODI_IND = :i AND DATA_VLR BETWEEN :ini AND :fim";
 
@@ -337,9 +343,24 @@ VALUES
         if (grupos.Count == 0)
             throw new ErroNegocioTabela("Nenhum item com origem R$/US$ para gerar.");
 
+        // Cotacao indexada: a tabela nasce amarrada a um INDEXADOR + DATA_VLR, e o ERP
+        // multiplica o valor da tabela (e o do item do pedido) pela cotacao daquela data
+        // — ver PPEDIDO_ATUDADOSVENDA: "if (not indexador is null) ... pven_aux * vlorind".
+        //
+        //   BARTER : BASI_TAB em SACAS  x cotacao da commodity (R$/saca) = R$
+        //   US$    : BASI_TAB em DOLAR  x PTAX                           = R$
+        //   R$     : sem indexador — o valor ja' esta' em reais (padrao nativo do ERP,
+        //            ver as tabelas 69/71 do proprio cliente).
+        //
+        // Sem isso a DLL recusa o pedido em dolar com INDEXA001 ("Data de referencia da
+        // cotacao invalida"), porque a CONDICAO de venda do dolar e' indexada a PTAX
+        // (CONDICAO.CODI_IND = PARAMGERTRC.INDX_PTC).
         DateTime? dataVlr = null;
+        int? indexador = null;
+
         if (r.MoedaAlvo == "BARTER")
         {
+            indexador = r.Commodity;
             dataVlr = await ProximaDataVlrAsync(conn, tx, r.Commodity);
             var valor = ValorCotacao(r, cambio, rtReais, rtDolar)
                 ?? throw new ErroNegocioTabela("Não foi possível calcular o valor da cotação (verifique RT US$/dólar).");
@@ -357,12 +378,30 @@ VALUES
                 await conn.ExecuteAsync(MergePtax, pPtax, tx);
             }
         }
+        else if (r.MoedaAlvo == "US$")
+        {
+            // Mesmo mecanismo do barter, trocando a commodity pelo indexador de PTAX e a
+            // cotacao do grao pelo cambio do pedido.
+            indexador = await conn.QueryFirstOrDefaultAsync<int?>(QIndexadorPtax, null, tx)
+                ?? throw new ErroNegocioTabela(
+                    "PARAMGERTRC.INDX_PTC não configurado — sem indexador de PTAX para a tabela em dólar.");
+            if (IsZero(cambio))
+                throw new ErroNegocioTabela("Câmbio não informado — necessário para a cotação da tabela em dólar.");
+
+            // Data livre PARA O INDEXADOR DE PTAX (o barter procura livre para a commodity).
+            dataVlr = await ProximaDataVlrAsync(conn, tx, indexador);
+            var pInd = new OracleDynamicParameters();
+            pInd.Add("ind", indexador);
+            pInd.Add("dt", dataVlr.Value);
+            pInd.Add("vlr", cambio);
+            await conn.ExecuteAsync(MergeIndvalor, pInd, tx);
+        }
 
         var geradas = new List<Gerada>();
         foreach (var origem in grupos.Keys.OrderBy(k => k, StringComparer.Ordinal))
         {
             var itens = grupos[origem];
-            var newTabe = await CriaCabtabAsync(conn, tx, ver, r, origem, dataVlr, label);
+            var newTabe = await CriaCabtabAsync(conn, tx, ver, r, origem, dataVlr, indexador, label);
             await GravaItensAsync(conn, tx, newTabe, itens, ver);
             await GravaHistoricoAsync(conn, tx, newTabe, itens);
             geradas.Add(new Gerada(origem, OrigemCod(origem), newTabe, itens.Count));
@@ -533,11 +572,12 @@ VALUES
     }
 
     // ── Gravacao ────────────────────────────────────────────────────────
-    private async Task<int> CriaCabtabAsync(OracleConnection conn, OracleTransaction tx, VerRow ver, Recipe r, string origem, DateTime? dataVlr, string label)
+    /// <summary>Cria a CABTAB. `indexador`/`dataVlr` vem nulos em R$ (tabela nao indexada) e
+    /// preenchidos em BARTER (commodity) e US$ (PTAX) — ver GerarNovaAsync.</summary>
+    private async Task<int> CriaCabtabAsync(OracleConnection conn, OracleTransaction tx, VerRow ver, Recipe r, string origem, DateTime? dataVlr, int? indexador, string label)
     {
         var newTabe = (int)Convert.ToInt64(
             await conn.ExecuteScalarAsync<object>("SELECT GEN_CABTAB_TABE_CTA.NEXTVAL FROM DUAL", null, tx));
-        var barter = r.MoedaAlvo == "BARTER";
 
         // modelo={} (pedido_erp nao envia id_modelo): CABTAB nasce so com os overrides.
         var cols = new List<string> { "TABE_CTA", "DESC_CTA", "VMAX_CTA", "DTBA_CTA", "DATA_VLR", "CODI_IND",
@@ -547,8 +587,8 @@ VALUES
         p.Add("DESC_CTA", DescTabela(ver, r, origem, label));
         p.Add("VMAX_CTA", ver.Get<DateTime?>("VENC_MAX"));
         p.Add("DTBA_CTA", ver.Get<DateTime?>("DATA_BASE"));
-        p.Add("DATA_VLR", barter ? dataVlr : null);
-        p.Add("CODI_IND", barter ? r.Commodity : null);
+        p.Add("DATA_VLR", dataVlr);
+        p.Add("CODI_IND", indexador);
         p.Add("SITU_CTA", "A");
         p.Add("FAPV_CTA", origem == "R$" ? ver.GetD("CORREC_RS") : ver.GetD("CORREC_USS"));
         p.Add("FATV_CTA", origem == "R$" ? ver.GetD("ANTEC_RS") : ver.GetD("ANTEC_USS"));

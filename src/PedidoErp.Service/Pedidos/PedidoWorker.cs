@@ -51,15 +51,28 @@ public sealed class PedidoWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try
+        // ModoTabelaSomente (etapa 2): a DLL nem e' carregada. E' a garantia mais forte de
+        // que nenhum pedido Reais/Dolar chega ao ERP neste modo — nao existe ponteiro para
+        // IncluiPedidoVendaAPI no processo.
+        if (_opt.ModoTabelaSomente)
         {
-            _dll.Carregar();
+            EventoServico(LogLevel.Information,
+                null,
+                "MODO TABELA SOMENTE (etapa 2): fila de analise (Reais/Dolar). Materializa tabelas no ERP; "
+                + "DLL NAO carregada, pedido NAO e' gravado, nada e' marcado como integrado.");
         }
-        catch (Exception e)
+        else
         {
-            EventoServico(LogLevel.Critical, e, "Nao foi possivel carregar a DLL — encerrando o servico.");
-            _lifetime.StopApplication();
-            return;
+            try
+            {
+                _dll.Carregar();
+            }
+            catch (Exception e)
+            {
+                EventoServico(LogLevel.Critical, e, "Nao foi possivel carregar a DLL — encerrando o servico.");
+                _lifetime.StopApplication();
+                return;
+            }
         }
 
         // Aguarda a 1a validacao de licenca concluir (o LicenseChecker do pacote roda
@@ -170,6 +183,8 @@ public sealed class PedidoWorker : BackgroundService
 
     private async Task RodadaAsync(CancellationToken ct)
     {
+        if (_opt.ModoTabelaSomente) { await RodadaTabelasAsync(ct); return; }
+
         var pendentes = await _acelera.ListarIntegraveisAsync(_opt.Desde, ct);
         IEnumerable<PedidoResumo> filtrados = pendentes;
         if (!string.IsNullOrWhiteSpace(_opt.Somente))
@@ -205,6 +220,72 @@ public sealed class PedidoWorker : BackgroundService
         }
         _log.LogInformation("Rodada: total={Total} integrados={Integrados} erro_permanente={ErroPerm} transitorio={Transit}",
             itens.Count, integrados, errosPerm, transit);
+    }
+
+    /// <summary>
+    /// ETAPA 2 — rodada do ModoTabelaSomente. Le a fila de ANALISE (Reais/Dolar),
+    /// busca o payload e materializa as tabelas de preco no ERP. Nao ha DLL, nao ha
+    /// /integrar e nao ha /erro: nada muda de estado no AceleraX, entao o mesmo pedido
+    /// reaparece na proxima rodada — e a materializacao e' idempotente
+    /// (APEX_GERTAB_LOG), devolvendo REAPROVEITADA em vez de gerar de novo.
+    /// </summary>
+    private async Task RodadaTabelasAsync(CancellationToken ct)
+    {
+        var pendentes = await _acelera.ListarParaAnaliseAsync(_opt.Desde, ct);
+        IEnumerable<PedidoResumo> filtrados = pendentes;
+        if (!string.IsNullOrWhiteSpace(_opt.Somente))
+            filtrados = filtrados.Where(p => p.CodiPed == _opt.Somente);
+        if (_opt.Limite is > 0)
+            filtrados = filtrados.Take(_opt.Limite.Value);
+        var itens = filtrados.ToList();
+        _log.LogInformation("Analise: {Total} pedido(s) R/D desde={Desde}", itens.Count, _opt.Desde ?? "-");
+
+        int ok = 0, falhas = 0;
+        foreach (var p in itens)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var payload = await _acelera.ObterPayloadAsync(p.CodiPed, p.Origem, ct);
+                if (payload is null)
+                {
+                    falhas++;
+                    _log.LogError("pedido={CodiPed} tipo={Tipo} — resposta sem payloadErp", p.CodiPed, p.TipoPed ?? "-");
+                    continue;
+                }
+
+                await _tabelas.PreencherAsync(payload, ct);
+
+                // Prova do que foi materializado: qual tabela cada item recebeu, por origem.
+                foreach (var it in payload["pedidoVendaItensList"]?.AsArray() ?? new())
+                {
+                    if (it is null) continue;
+                    _log.LogInformation("  item produto={Produto} origem={Origem} -> codigoTabelaPreco={Tabela}",
+                        it["codigoProduto"], it["origem"], it["codigoTabelaPreco"]);
+                }
+                ok++;
+                _log.LogInformation("pedido={CodiPed} tipo={Tipo} TABELAS MATERIALIZADAS (pedido NAO enviado ao ERP)",
+                    p.CodiPed, p.TipoPed ?? "-");
+            }
+            catch (ApiAuthException)
+            {
+                throw; // 401 interrompe o lote
+            }
+            catch (ErroNegocioTabela e)
+            {
+                // Erro de negocio da materializacao. NAO chama POST /erro: a maquina de
+                // estados de pedidos_integracao pertence ao fluxo de sincronizacao, que
+                // nesta etapa continua fechada para R/D.
+                falhas++;
+                _log.LogError("pedido={CodiPed} tipo={Tipo} ERRO DE TABELA: {Msg}", p.CodiPed, p.TipoPed ?? "-", e.Message);
+            }
+            catch (Exception e)
+            {
+                falhas++;
+                _log.LogError(e, "pedido={CodiPed} tipo={Tipo} falhou na materializacao", p.CodiPed, p.TipoPed ?? "-");
+            }
+        }
+        _log.LogInformation("Rodada (tabela somente): total={Total} ok={Ok} falhas={Falhas}", itens.Count, ok, falhas);
     }
 
     // Desfecho por pedido: Integrado (sai da fila OK), ErroPermanente (sai da fila com ERR),

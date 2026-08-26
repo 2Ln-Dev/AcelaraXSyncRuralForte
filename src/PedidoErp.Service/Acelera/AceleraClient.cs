@@ -30,8 +30,10 @@ public sealed class ApiException : Exception
     }
 }
 
-/// <summary>Um pedido a integrar (par pedido, origem) devolvido pela lista.</summary>
-public sealed record PedidoResumo(string CodiPed, string? Origem);
+/// <summary>Um pedido a integrar (par pedido, origem) devolvido pela lista.
+/// `TipoPed` so' vem preenchido na fila de ANALISE ('R'/'D'); na fila de
+/// sincronizacao e' null (la' todos sao barter por construcao).</summary>
+public sealed record PedidoResumo(string CodiPed, string? Origem, string? TipoPed = null);
 
 /// <summary>
 /// Cliente da API de integracao de pedidos do AceleraX. Port de
@@ -65,9 +67,21 @@ public sealed class AceleraClient
     }
 
     /// <summary>Pares (pedido, origem) aprovados e ainda nao integrados.</summary>
-    public async Task<IReadOnlyList<PedidoResumo>> ListarIntegraveisAsync(string? desde, CancellationToken ct)
+    public Task<IReadOnlyList<PedidoResumo>> ListarIntegraveisAsync(string? desde, CancellationToken ct)
+        => ListarAsync("api/v1/integracao/pedidos", desde, ct);
+
+    /// <summary>
+    /// Fila de ANALISE (etapa 2): pedidos APROVADOS de Reais/Dolar, para materializar
+    /// as tabelas de preco no ERP sem gravar o pedido.
+    ///
+    /// NAO e' a fila de sincronizacao. Quem consome isto e' o ModoTabelaSomente do
+    /// worker, que nunca chama a DLL nem marca integrado.
+    /// </summary>
+    public Task<IReadOnlyList<PedidoResumo>> ListarParaAnaliseAsync(string? desde, CancellationToken ct)
+        => ListarAsync("api/v1/integracao/pedidos/analise", desde, ct);
+
+    private async Task<IReadOnlyList<PedidoResumo>> ListarAsync(string path, string? desde, CancellationToken ct)
     {
-        var path = "api/v1/integracao/pedidos";
         if (!string.IsNullOrWhiteSpace(desde))
             path += "?desde=" + Uri.EscapeDataString(desde);
 
@@ -82,7 +96,10 @@ public sealed class AceleraClient
             var codi = it["codi_ped"]?.ToString();
             if (string.IsNullOrEmpty(codi)) continue;
             var origem = it["origem"]?.ToString();
-            lista.Add(new PedidoResumo(codi, string.IsNullOrEmpty(origem) ? null : origem));
+            var tipo = it["tipo_ped"]?.ToString();
+            lista.Add(new PedidoResumo(codi,
+                string.IsNullOrEmpty(origem) ? null : origem,
+                string.IsNullOrEmpty(tipo) ? null : tipo));
         }
         return lista;
     }
