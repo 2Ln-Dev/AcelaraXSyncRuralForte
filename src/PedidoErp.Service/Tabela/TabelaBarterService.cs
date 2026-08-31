@@ -486,8 +486,11 @@ VALUES
             return (Round6(basiB), Round6(novoCusto), margEf);
         }
 
-        var fator = FatorCorrecao(meses, origem, correcRs, antecRs, correcUss, antecUss);
-        var custoEq = c * fator + a;
+        // A GERACAO DE TABELA NAO aplica correcao financeira: o custo vai para a tabela
+        // como esta' na versao, so' convertido pelo cambio. FatorCorrecao/Meses continuam
+        // no arquivo porque a correcao segue valendo onde ela e' regra (fluxo do pedido);
+        // aqui ela deixou de ser aplicada de proposito. Espelha gerar_tabela_pricing.py.
+        var custoEq = c + a;
         var venda = divisor > 0 ? custoEq / divisor : custoEq;
         var basi = ConvMoeda(venda, origem, moedaAlvo, cambio!.Value);
         var cust = ConvMoeda(custoEq, origem, moedaAlvo, cambio!.Value);

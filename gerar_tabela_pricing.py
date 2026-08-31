@@ -69,8 +69,11 @@ def _preco_item(origem, custo, adicional, margem_pct, meses,
         basi = novo_custo / divisor if divisor > 0 else novo_custo
         return round(basi, 6), round(novo_custo, 6), marg_ef
 
-    fator = _fator_correcao(meses, origem, correc_rs, antec_rs, correc_uss, antec_uss)
-    custo_eq = custo * fator + adicional
+    # A GERAÇÃO DE TABELA NÃO aplica correção financeira: o custo vai para a tabela
+    # como está na versão, só convertido pelo câmbio. _fator_correcao continua no
+    # módulo porque a correção segue valendo onde ela é regra (fluxo do pedido); aqui
+    # ela deixou de ser aplicada de propósito. Espelha TabelaBarterService.PrecoItem.
+    custo_eq = custo + adicional
     venda = custo_eq / divisor if divisor > 0 else custo_eq
     basi = _conv_moeda(venda, origem, moeda_alvo, cambio)
     cust = _conv_moeda(custo_eq, origem, moeda_alvo, cambio)
@@ -78,6 +81,10 @@ def _preco_item(origem, custo, adicional, margem_pct, meses,
 
 
 # ── Carga da versão / itens ─────────────────────────────────────────
+# O `id` recebido é o da TABELA DE PREÇO (erp_id / ID_CTAB), que corresponde a
+# APEX_GER_TABELAS.ID_TAB_DEST — NÃO ao ID da versão. O app manda a tabela de
+# preço (ex.: 509); a versão real (ex.: 487) é resolvida por ID_TAB_DEST. Ver
+# comercial.ts (payloadErp) no acelera-x-app.
 _QUERY_VERSAO = """
 SELECT G.ID, G.NOVA_VERSAO, G.ID_TAB_DEST, CIC.DESC_CIC,
        G.DATA_BASE, G.VENC_MAX, G.PTAX_VISTA, G.PTAX_PRAZO,
@@ -89,7 +96,7 @@ SELECT G.ID, G.NOVA_VERSAO, G.ID_TAB_DEST, CIC.DESC_CIC,
        G.DATA_FINALIZACAO
 FROM   APEX_GER_TABELAS G
 INNER  JOIN CICLO CIC ON CIC.CODI_CIC = G.CODI_CIC
-WHERE  G.ID = :id
+WHERE  G.ID_TAB_DEST = :id
 """
 
 # Leva TODOS os produtos relacionados ao principal via VPRD_PRINCIPAL.
@@ -105,6 +112,8 @@ ORDER  BY IV.ORIGEM, VP.DESC_PSV
 
 
 def _carrega_versao(id_ger, conn):
+    """`id_ger` aqui é o id da TABELA DE PREÇO (ID_TAB_DEST), não o ID da versão.
+    A versão é resolvida por G.ID_TAB_DEST = :id (ver _QUERY_VERSAO)."""
     cur = conn.cursor()
     cur.execute(_QUERY_VERSAO, {"id": id_ger})
     row = cur.fetchone()
@@ -274,7 +283,14 @@ def _cria_cabtab(ver, p, origem, modelo, data_vlr, moeda_label, conn):
         "SITU_CTA": "A",
         "FAPV_CTA": ver.get("correc_rs") if origem == "R$" else ver.get("correc_uss"),
         "FATV_CTA": ver.get("antec_rs") if origem == "R$" else ver.get("antec_uss"),
+        # NOT NULL sem default no banco: herda do modelo se houver, senão o padrão '11'.
+        "TCOM_CTA": modelo.get("TCOM_CTA") or "11",
+        # Validade da tabela (RCTA004 se null) — vem da precificação: vencimento máximo.
+        "VALI_CTA": ver.get("venc_max"),
     }
+    # Empresa: opcional; se o chamador informar codi_emp, usa; senão herda do modelo.
+    if p.get("codi_emp") is not None:
+        overrides["CODI_EMP"] = p["codi_emp"]
     copia = {c: v for c, v in modelo.items() if c not in _CABTAB_SKIP and c not in overrides}
     dados = {**copia, **overrides}
     cols = list(dados.keys())
@@ -341,26 +357,53 @@ def _grava_indvalor(codi_ind, data_vlr, valor, conn):
         """
         MERGE INTO INDVALOR d
         USING (SELECT CODI_EMP FROM CADEMP) e
-          ON (d.CODI_IND = :ind AND d.CODI_EMP = e.CODI_EMP AND d.DATA_VLR = :dt)
+          ON (d.CODI_IND = :ind AND d.CODI_EMP = e.CODI_EMP AND TRUNC(d.DATA_VLR) = TRUNC(:dt))
         WHEN MATCHED THEN UPDATE SET d.VLOR_VLR = :vlr
         WHEN NOT MATCHED THEN
           INSERT (CODI_IND, CODI_EMP, DATA_VLR, VLOR_VLR)
-          VALUES (:ind, e.CODI_EMP, :dt, :vlr)
+          VALUES (:ind, e.CODI_EMP, TRUNC(:dt), :vlr)
         """,
         {"ind": codi_ind, "dt": data_vlr, "vlr": valor},
     )
     cur.close()
 
 
+def _grava_indvalor_ptax(data_vlr, cambio, conn):
+    """Grava a cotação do CÂMBIO (indexador PTAX de cada empresa, PARAMGERTRC.INDX_PTC)
+    na mesma data_vlr da cotação barter, para TODAS as empresas. NÃO sobrescreve o que
+    já existe: se já houver cotação para (empresa, indexador PTAX, data), deixa como está.
+
+    A DLL de gravação do pedido, no barter, exige a cotação PTAX além da cotação da
+    commodity na mesma DATA_VLR/empresa — sem ela dá INDEXA001 ("data de referência da
+    cotação inválida")."""
+    if cambio is None:
+        return
+    cur = conn.cursor()
+    cur.execute(
+        """
+        MERGE INTO INDVALOR d
+        USING (SELECT p.CODI_EMP, p.INDX_PTC
+                 FROM PARAMGERTRC p WHERE p.INDX_PTC IS NOT NULL) e
+          ON (d.CODI_IND = e.INDX_PTC AND d.CODI_EMP = e.CODI_EMP AND TRUNC(d.DATA_VLR) = TRUNC(:dt))
+        WHEN NOT MATCHED THEN
+          INSERT (CODI_IND, CODI_EMP, DATA_VLR, VLOR_VLR)
+          VALUES (e.INDX_PTC, e.CODI_EMP, TRUNC(:dt), :cambio)
+        """,
+        {"dt": data_vlr, "cambio": cambio},
+    )
+    cur.close()
+
+
 def gerar(conn, p):
     """Gera as tabelas (1 por origem). NÃO faz commit — quem chama controla a transação.
-    Retorna (geradas, cambio, ciclo) onde geradas = lista de dicts
-    {origem, origem_cod, tabe_cta, qtd_itens, descricao}."""
+    Retorna (geradas, cambio, ciclo, data_vlr) onde geradas = lista de dicts
+    {origem, origem_cod, tabe_cta, qtd_itens, descricao} e data_vlr é a data da
+    cotação (só BARTER; None nas demais moedas)."""
     ver = _carrega_versao(p["id_ger"], conn)
     cambio, rt_reais, rt_dolar = _resolve_params(ver, p)
-    modelo = _carrega_modelo(p["id_modelo"], conn)
-    if modelo is None:
-        raise ErroNegocio("Informe a CABTAB modelo.")
+    # id_modelo é opcional: sem modelo, o cabeçalho sai só com os overrides + os
+    # defaults do banco (TCOM_CTA é defaultado em _cria_cabtab).
+    modelo = _carrega_modelo(p.get("id_modelo"), conn) or {}
 
     label = _moeda_label(p, conn)
     grupos = _calcula(ver, cambio, rt_reais, rt_dolar, p)
@@ -374,6 +417,8 @@ def gerar(conn, p):
         if valor is None:
             raise ErroNegocio("Não foi possível calcular o valor da cotação (verifique RT US$/dólar).")
         _grava_indvalor(p["commodity"], data_vlr, valor, conn)
+        # A DLL do pedido também lê a cotação do câmbio (PTAX) nessa mesma data.
+        _grava_indvalor_ptax(data_vlr, cambio, conn)
 
     geradas = []
     for origem, itens in sorted(grupos.items()):
@@ -385,4 +430,4 @@ def gerar(conn, p):
             "tabe_cta": new_tabe, "qtd_itens": len(itens),
             "descricao": _desc_tabela(ver, p, origem, label),
         })
-    return geradas, cambio, ver.get("desc_cic")
+    return geradas, cambio, ver.get("desc_cic"), data_vlr
