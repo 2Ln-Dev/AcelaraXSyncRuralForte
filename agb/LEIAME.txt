@@ -1,0 +1,17 @@
+Pasta do DLL do ERP (AGBPedidoVenda) - NAO versionada
+=====================================================
+
+O build (build.ps1) espera encontrar aqui a DLL de gravacao de pedido do ERP:
+
+  AGBPedidoVenda.dll   DLL 32-bit (Delphi) que grava o pedido no SIAGRI/AGB.
+
+Ela NAO vai para o repositorio (gitignore) porque e' da VERSAO DO ERP do cliente
+e muda a cada atualizacao do ERP. Copie a DLL do AGB/SIAGRI instalado e coloque-a
+aqui ANTES de rodar o build.
+
+  AGB.ini              aponta o Oracle do ERP do cliente - tambem NAO versionado.
+                       No pacote final, o operador coloca o AGB.ini do cliente na
+                       pasta agb\ ao lado do HubAceleraX.exe (ver LEIA-AGB.txt
+                       gerado no pacote).
+
+So' este LEIAME.txt e' versionado (para a pasta existir no repo).

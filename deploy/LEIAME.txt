@@ -1,0 +1,35 @@
+Hub AceleraX - sincronizador ERP <-> AceleraX (.NET)
+====================================================
+
+Um unico servico do Windows (HubAceleraX, x86) roda os dois fluxos no mesmo
+processo:
+  - carga de base   (ERP Oracle -> API AceleraX)
+  - pedidos         (AceleraX -> ERP, gravando pela DLL AGBPedidoVenda 32-bit)
+
+O .exe e self-contained: a maquina NAO precisa de .NET.
+
+ANTES DE INSTALAR:
+  - Coloque o AGB.ini do ERP DESTE cliente na pasta agb\ (ver agb\LEIA-AGB.txt).
+    Sem ele, a gravacao do pedido no ERP falha (a carga de base funciona sem ele).
+
+INSTALAR (manual, sem o instalador Inno):
+  1. Copie appsettings.Production.exemplo.json para appsettings.Production.json e
+     preencha: Oracle (Schema/DSN), Acelera (ApiUrl/ApiKey), Sync (ConsultasDir).
+  2. Rode INSTALAR.bat COMO ADMINISTRADOR.
+
+  (Ou use o instalador HubAceleraX-Setup-<versao>.exe, que pergunta esses dados e
+   cria o servico sozinho.)
+
+OPERACAO:
+  sc query HubAceleraX            status
+  sc stop  HubAceleraX            parar
+  sc start HubAceleraX            iniciar
+  REMOVER.bat                     remove o servico (preserva a config)
+
+LOGS: logs\hubacelerax-*.log (rotacao diaria, 30 dias).
+
+OBS: modo PONTE - NAO se informa senha do Oracle; o sistema recupera o acesso do
+proprio ERP (CADUSU). So' Schema + DSN.
+
+NOME: o servico chama-se HubAceleraX (nao "HubPadrao"/"Hub2LN", que e' outro
+produto). Pode conviver na mesma maquina com o Hub de outro produto.

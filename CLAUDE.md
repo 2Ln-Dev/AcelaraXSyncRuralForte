@@ -1,41 +1,79 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guia para o Claude Code trabalhar neste repositório.
 
-## Commands
+Sincronizador ERP ↔ AceleraX, **100% .NET 8**, num **único serviço do Windows**.
+Mesma arquitetura de leitura de banco, versão e deploy do **HubUniSeeds** (`2Ln-Dev/HubUniSeeds`).
+
+> **Nomes:** por dentro o namespace/pasta é `AceleraXSync`; o que o cliente vê (serviço,
+> exe, produto) é **HubAceleraX** — mesmo critério do HubUniSeeds (namespace `HubPadrao.Api`,
+> produto `Hub2LN`). **Não** reutilizar `HubPadrao`/`Hub2LN`: já existe esse serviço de outro
+> produto nas máquinas.
+
+## Comandos
 
 ```bash
-# Run all tests
-venv\Scripts\python.exe -m pytest . --ignore=venv -v
+dotnet build AceleraXSync.sln
 
-# Run a single test file
-venv\Scripts\python.exe -m pytest test_transformer.py -v
+# Rodar em dev (DOTNET_ENVIRONMENT=Development usa appsettings.Development.json)
+dotnet run --project src/AceleraXSync
 
-# Run a single test by name
-venv\Scripts\python.exe -m pytest test_transformer.py::test_transform_renames_column_for_tabelas_preco -v
-
-# Run the sync manually (requires .env with real credentials)
-venv\Scripts\python.exe sync.py
+# Gerar o pacote de distribuição (self-contained + instalador Inno)
+pwsh build/build.ps1 -Version 1.0.0
+pwsh build/build.ps1 -Version 1.0.0 -SkipInstaller
 ```
 
-## Architecture
+> **Pré-requisito de build/restore:** o pacote `2LN.Licensing` vem do feed local
+> `2ln-local` (`nuget.config` → `C:\Integracoes\_packages`). Sem ele o restore falha.
 
-`sync.py` is the entrypoint and orchestrator. It loads config, opens connections, iterates `SYNC_ORDER` from `tables_spec.py`, and calls the three pipeline stages in sequence for each table: fetch → transform → upsert.
+## Serviço único: HubAceleraX (x86)
 
-**Pipeline stages:**
-- `oracle_reader.py` — connects to Oracle via `cx_Oracle`, executes `SELECT` on HUBRAIZ views, returns `list[dict]`. Retries once (5s delay) on `cx_Oracle.DatabaseError` before raising `OracleConnectionError`.
-- `transformer.py` — maps Oracle column names to Supabase names and converts types (datetime → ISO string, whole float → int). Mapping is driven by the `columns` dict in each table's spec.
-- `supabase_writer.py` — splits rows into `batch_size` chunks and calls `.upsert(on_conflict=...)` per batch. Retries once on timeout; raises `SupabaseAuthError` immediately on 401/403 (stops entire sync).
+Um projeto (`src/AceleraXSync`) → um exe `HubAceleraX.exe` → um Windows Service
+`HubAceleraX`, que hospeda **dois workers** no mesmo processo:
 
-**Central config: `tables_spec.py`**
+| Worker | Arquivo | Fluxo |
+|---|---|---|
+| `BaseSyncWorker` | `Sync/BaseSyncWorker.cs` | **Carga de base**: ERP Oracle → API AceleraX (`POST /api/v1/integracao/base/<slug>`). |
+| `PedidoWorker` | `Pedidos/PedidoWorker.cs` | **Pedidos**: AceleraX → ERP, via DLL `agb/AGBPedidoVenda.dll`. |
 
-All table behaviour is declared here: Oracle view name, Supabase table name, UPSERT conflict key, and the Oracle→Supabase column map. Adding or changing a table only requires editing this file — no changes to the pipeline modules.
+**x86 obrigatório:** a DLL AGB é 32-bit (P/Invoke in-process) → o processo tem que ser x86.
+O Oracle gerenciado roda em x86, então a carga de base roda no mesmo processo.
 
-**`cx_Oracle` is optional at import time.** The real Oracle client is not available in CI/dev environments, so `oracle_reader.py` wraps the import in `try/except ModuleNotFoundError` and sets `cx_Oracle = None`. Tests stub the module via `sys.modules` before importing `oracle_reader`. Do not change this pattern.
+Ambos autenticam na API com `X-Api-Key` (uma por tenant); o `codi_ten` vem do servidor.
 
-**Test locations:** `tests/` holds `test_config.py` and `test_logger.py`; the remaining test files live at the project root. Both locations are auto-discovered by pytest.
+> A carga de base em `RunOnce=true` **não** derruba o host (co-hospeda o PedidoWorker):
+> só encerra o processo quando `DryRun=true` (atalho de teste). Em serviço, use
+> `Sync:RunOnce=false` (laço).
 
-**Error handling contract in `sync.py`:**
-- `OracleConnectionError` → log, skip table, continue to next table
-- `SupabaseAuthError` → log, break out of loop entirely
-- Batch errors from `upsert_table` → log each, set exit code 1, continue
+## Leitura de banco — padrão HubUniSeeds
+
+`Core/Data/OracleConnectionFactory.cs` + `Core/Security/{BridgeCredentials,ErpCrypto,SecretProtector}.cs`.
+Dois modos: **direto (dev)** com `Oracle:User`+`Password`; **ponte (produção)** só `Oracle:Schema`+`Dsn`
+(a senha do schema vem do `CADUSU` do ERP). Leitura dinâmica via **Dapper + `Core/Data/Rows.cs`** (`Rows.D`).
+
+A carga de base lê por **view** (`V_AX_*`) ou por **consulta por cliente** (`Sync:ConsultasDir` = nome
+do cliente → `consultas/<cliente>/<entidade>.sql`, **embutidas no exe** como EmbeddedResource —
+o SQL não vai para o disco do cliente); ver `src/AceleraXSync/consultas/README.md`. Fonte da
+verdade do De/Para: `Sync/TablesSpec.cs` (colunas `SoConsulta` só existem no modo consulta).
+
+## Versão e deploy — padrão HubUniSeeds
+
+- **Versão:** `build/build.ps1 -Version X.Y.Z` → `dotnet publish -p:Version=X.Y.Z`.
+- **Pacote:** um `.exe` único self-contained win-x86 (a máquina de destino não precisa de .NET).
+  A licença 2LN é embutida em Release (`LICENCA_OBRIGATORIA`); `-SemLicenca` publica sem o gate.
+- **Instalador:** `installer/hubacelerax.iss` (Inno Setup) — pergunta Oracle (Schema/DSN),
+  API (ApiUrl/ApiKey) e a pasta de consultas; escreve `appsettings.Production.json`; cria e
+  inicia o serviço; migra instalações antigas de dois serviços. Headless (sem porta/firewall).
+- **Deploy manual:** `deploy/{INSTALAR,REMOVER}.bat` + `appsettings.Production.exemplo.json`.
+
+## Configuração
+
+`appsettings.json` traz defaults; o real vai em arquivo **gitignored**
+(`appsettings.Development.json` ou `appsettings.Production.json`). Seções:
+`Acelera`, `Oracle`, `Sync` (carga de base), `Dll`/`Pedido` (pedidos), `Licenca`.
+
+## Contrato de erro (BaseSyncWorker)
+
+- `OracleReadException` → loga, pula a entidade, segue.
+- `ApiAuthException` (401) → loga e interrompe a rodada.
+- Erro de chunk → loga cada um, marca falha e segue.

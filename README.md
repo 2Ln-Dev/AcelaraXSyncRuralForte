@@ -1,245 +1,104 @@
-# ERP → AceleraX Sync
+# Hub AceleraX (sincronizador ERP ↔ AceleraX)
 
-Serviço Python standalone que sincroniza dados do Oracle ERP (Senior Agribusiness) para o **AceleraX Agro** **via API HTTP** (não mais direto no banco). Lê as tabelas-base via views no schema `AGROINSU` (`V_AX_*`), transforma as colunas conforme o De/Para da especificação e faz `POST` nos endpoints de integração do AceleraX, que executam o UPSERT idempotente.
+Sincronizador entre o **ERP Oracle** (Senior Agribusiness / SIAGRI) e o app **AceleraX**,
+escrito **100% em .NET 8**, num **único serviço do Windows**. Mesma arquitetura de leitura
+de banco, geração de versão e deploy do **HubUniSeeds**.
 
-> **Autenticação:** header `X-Api-Key` (uma chave por tenant). O `codi_ten` é
-> resolvido no servidor a partir da chave — o sync **não** envia tenant. Assim o
-> ERP não precisa mais de credencial do banco (`service_role`).
+Um projeto (`src/AceleraXSync`) → um exe `HubAceleraX.exe` → um serviço `HubAceleraX` (x86),
+self-contained (a máquina de destino não precisa de .NET), que roda **dois workers** no mesmo
+processo:
+
+| Worker | Direção |
+|---|---|
+| **Carga de base** | ERP → AceleraX (`POST /api/v1/integracao/base/<slug>`). |
+| **Pedidos** | AceleraX → ERP, via DLL `agb/AGBPedidoVenda.dll` (32-bit → processo x86). |
+
+> **Nome:** o serviço/produto chama-se **HubAceleraX** — não `HubPadrao`/`Hub2LN`, que é
+> outro produto. Os dois podem conviver na mesma máquina. Por dentro, o namespace/pasta é
+> `AceleraXSync` (como o HubUniSeeds mantém `HubPadrao.Api` e só o produto vira `Hub2LN`).
+
+> **Autenticação:** header `X-Api-Key` (uma por tenant). O `codi_ten` é resolvido no
+> servidor a partir da chave — o sync não envia tenant e não usa credencial de banco do app.
 
 ---
 
-## Pré-requisitos
+## Leitura do ERP: views ou consultas por cliente
 
-- Python 3.9+
-- Oracle Instant Client instalado e no PATH (necessário para `cx_Oracle`)
-- Acesso de rede ao banco Oracle e à **API publicada do AceleraX**
-- Uma **`X-Api-Key`** da integração (gerada pelo time AceleraX, por tenant)
-- Usuário `AGROINSU` com acesso às views `V_AX_*` (já criadas no próprio schema)
+- **Modo view** (cliente original): lê as views `V_AX_*` do schema.
+- **Modo consulta** (`Sync:ConsultasDir`): roda `consultas/<cliente>/<entidade>.sql`, sem
+  criar views no ERP — usado quando o ERP do cliente não tem as views (ex.: **Rural Forte**,
+  schema `RURALF`). Ver `src/AceleraXSync/consultas/README.md`.
+
+A leitura usa **Dapper** (dinâmica, `Rows.D`) e conexão em **modo ponte** (só Schema + DSN;
+a senha do schema vem do `CADUSU` do próprio ERP) — igual ao HubUniSeeds.
 
 ---
 
-## Instalação
+## Build e deploy
+
+```powershell
+pwsh build\build.ps1 -Version 1.0.0            # self-contained + instalador
+pwsh build\build.ps1 -Version 1.0.0 -SkipInstaller
+```
+
+Pré-requisitos de build: **.NET 8 SDK**, o feed local `2ln-local` com o pacote
+`2LN.Licensing` (`nuget.config`) e, para o instalador, **Inno Setup 6**.
+
+Resultado:
+- `build\HubAceleraX-<versão>.zip`
+- `installer\Output\HubAceleraX-Setup-<versão>.exe`
+
+O instalador pergunta a conexão Oracle (Schema/DSN), a API AceleraX (ApiUrl/ApiKey) e a pasta
+de consultas; escreve o `appsettings.Production.json`, cria e inicia o serviço, e migra
+instalações antigas (quando eram dois serviços separados). Alternativa manual:
+`deploy\INSTALAR.bat` (após preencher o `appsettings.Production.json`).
+
+O AGB.ini do ERP do cliente vai na pasta `agb\` (não acompanha o pacote).
+
+---
+
+## Rodar em desenvolvimento
 
 ```bash
-# 1. Crie e ative o ambiente virtual
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# Linux / macOS
-source venv/bin/activate
-
-# 2. Instale as dependências
-pip install -r requirements.txt
-
-# Nota: cx_Oracle precisa ser instalado separadamente após configurar o Oracle Instant Client
-pip install cx-Oracle==8.3.0
+dotnet run --project src/AceleraXSync
 ```
+
+Com `DOTNET_ENVIRONMENT=Development` e um `appsettings.Development.json` (gitignored)
+preenchido. Para validar a carga de base sem enviar nada: `Sync:DryRun=true` lê e transforma
+tudo e grava `dump/<entidade>.json` **sem** chamar a API.
 
 ---
 
-## Configuração
+## Entidades da carga de base
 
-Copie o arquivo de exemplo e preencha com as credenciais reais:
+Ordem (`TablesSpec.SyncOrder`). Cada entidade vira um `POST /api/v1/integracao/base/<slug>`;
+a chave de upsert é resolvida no servidor.
 
-```bash
-copy .env.example .env
-```
+| Entidade | Slug | Chave de upsert |
+|---|---|---|
+| empresa | `empresas` | `(codi_ten, codi_emp)` |
+| vendedor | `vendedores` | `(codi_ten, codi_pes)` |
+| categorias¹ | `categorias` | `(codi_ten, codi_cca)` |
+| transac (clientes) | `clientes` | `(codi_ten, codi_tra)` |
+| propried | `propriedades` | `(codi_ten, prop_pro)` |
+| grupo | `grupos` | `(codi_ten, chavegrupo)` |
+| prodserv | `produtos` | `(codi_ten, codi_psv)` |
+| ciclos_safra | `ciclos` | `(codi_ten, codi_cic)` |
+| estoque | `estoque` | `(codi_ten, codi_pro, codi_fil)` |
+| tabelas_preco + itens | `tabelas-preco` | `(codi_ten, erp_id)` / `(…, codi_pro)` |
+| condicao | `condicoes` | `(codi_ten, cond_con)` |
+| carteira | `carteira` | `(codi_ten, origem_erp_id)` |
 
-```env
-# Oracle
-ORACLE_HOST=<IP ou hostname do servidor Oracle>
-ORACLE_PORT=1521
-ORACLE_SID=<SID ou service name>
-ORACLE_USER=agroinsu
-ORACLE_PASSWORD=<senha>
+> ¹ `categorias` e algumas colunas (`CODI_SUP` do vendedor, `PRECO`→`prrs_itp` dos itens)
+> só existem no **modo consulta** — ver `TablesSpec.cs` (flag `SoConsulta`).
 
-# AceleraX API (escrita pela API, não mais direto no banco)
-ACELERA_API_URL=https://app.seudominio.com.br   # base publicada, sem barra no fim
-ACELERA_API_KEY=<chave X-Api-Key da integração>  # identifica o tenant
-
-# Sync
-SYNC_INTERVAL_SECONDS=3600
-LOG_FILE_PATH=./sync.log
-BATCH_SIZE=1000
-LOG_LEVEL=INFO
-```
-
-> **Importante:** Nunca versione o arquivo `.env`. Ele já está no `.gitignore`.
+A **tabela de preço** vai cabeçalho + itens no mesmo endpoint; o servidor resolve
+`erp_id → codi_tab` e reporta itens órfãos.
 
 ---
 
-## Execução
+## Documentação por tema
 
-```bash
-# Executar sincronização manualmente
-python sync.py
-```
-
-O script termina com código `0` (sucesso) ou `1` (alguma tabela teve erro). Todos os eventos são gravados no arquivo de log configurado em `LOG_FILE_PATH`.
-
-### Agendamento automático
-
-**Windows — Task Scheduler:**
-- Ação: `python C:\caminho\para\sync.py`
-- Gatilho: intervalo desejado (ex: a cada 6 horas)
-
-**Linux — cron:**
-```bash
-0 */6 * * * cd /opt/erp-sync && python sync.py >> /var/log/erp-sync.log 2>&1
-```
-
----
-
-## Produção (Vercel) — checklist e solução de problemas
-
-O AceleraX é um app Next.js hospedado na **Vercel**; a integração grava no
-**Supabase**. A rota de integração (`/api/v1/integracao/base/*`) é a **única** que
-usa o cliente `service_role` do Supabase (`createServiceClient()`), então depende
-de configuração própria — separada do app web/mobile. Os tropeços mais comuns:
-
-### 1. `ACELERA_API_URL` = base publicada
-Aponte para a URL publicada, **sem barra no fim** (ex.:
-`https://acelera-x-app.vercel.app`). Se ficar em `localhost`, o POST falha com
-"conexão recusada" e nada é gravado (`ROWS_UPSERTED:0`).
-
-### 2. `SUPABASE_SERVICE_ROLE_KEY` na Vercel (a pegadinha principal)
-Env lida por `createServiceClient()` no servidor. Precisa estar:
-- no environment **Production** da Vercel (não só Preview/Development);
-- no **formato novo do Supabase** (`sb_secret_...`) quando o projeto usa as API
-  keys novas — o **JWT `service_role` legado** (`eyJ...`) é **rejeitado** nesse caso;
-- colada sem aspas/espaço/quebra de linha; a env só vale num **redeploy feito
-  depois** de ela existir naquele escopo.
-
-Sintomas quando está errada:
-- **ausente** → `createClient` lança `supabaseKey is required` → todo POST com
-  chave dá **HTTP 500** (`internal`).
-- **presente porém errada** (projeto errado / JWT legado / anon) → o Supabase
-  rejeita, a busca da chave volta vazia → **HTTP 401**.
-
-> ⚠️ **Mobile/web funcionando NÃO prova que a service-role está OK.** Mobile e web
-> usam a `anon` + Bearer do usuário (outro caminho); só a integração usa a
-> `service_role`. Se o mobile vai mas o sync dá 401/500, o problema é essa env.
-
-### 3. `X-Api-Key` cadastrada no Supabase de produção
-O servidor resolve o tenant procurando `sha256(X-Api-Key)` em
-`integracao_api_keys` (com `ativ_iak = true`). A chave tem que existir **no mesmo
-projeto Supabase que a Vercel usa** (`NEXT_PUBLIC_SUPABASE_URL`) e apontar para o
-`codi_ten` certo. Se não existir/estiver inativa → **HTTP 401**.
-
-### Teste rápido de autenticação (não grava nada)
-```bash
-curl -s -w "\n%{http_code}\n" -X POST \
-  "$ACELERA_API_URL/api/v1/integracao/base/vendedores" \
-  -H "X-Api-Key: <sua-chave>" -H "Content-Type: application/json" \
-  --data '{"items":[]}'
-```
-| Resposta | Significado |
-|----------|-------------|
-| **422** `A lista "items" está vazia.` | ✅ auth OK — pode rodar o sync |
-| **401** `Não autenticado.` | chave não cadastrada/inativa no Supabase de produção |
-| **500** `internal` | `SUPABASE_SERVICE_ROLE_KEY` ausente/errada na Vercel |
-
-Para ver o erro real de um 500, abra os **Runtime Logs** do deploy na Vercel e
-procure a linha `[api] erro não tratado:`.
-
-### Itens órfãos no fim do sync (exit 1 esperado)
-A view de **itens** (`V_AX_ITABELA_PRECO`, fonte `APEX_ITAB_VIG`) pode conter itens
-de tabelas de preço **inativas** que não existem na view de **cabeçalho**
-(`V_AX_TABELA_PRECO`, fonte `VTABELA_SINC`). Sem cabeçalho, esses itens não têm onde
-vincular: são **descartados** e contados como órfãos, e o sync termina com
-`EXIT_CODE:1`. Isso é **esperado** e **não afeta** as tabelas ativas.
-
----
-
-## Tabelas sincronizadas (Onda 1)
-
-A ordem segue o `SYNC_ORDER` de `tables_spec.py` (respeita a dependência de
-chaves entre entidades). Cada entidade vira um `POST` em
-`/api/v1/integracao/base/<slug>`; a chave UPSERT é resolvida no servidor (o
-`codi_ten` vem da `X-Api-Key`, não do corpo).
-
-| Ordem | View Oracle (AGROINSU) | Tabela destino | Slug do endpoint | Chave UPSERT |
-|-------|------------------------|----------------|------------------|--------------|
-| 1 | `V_AX_VENDEDOR` | `vendedor` | `vendedores` | `(codi_ten, codi_pes)` |
-| 2 | `V_AX_CLIENTES` | `transac` | `clientes` | `(codi_ten, codi_tra)` |
-| 3 | `V_AX_PROPRIEDADES` | `propried` | `propriedades` | `(codi_ten, prop_pro)` |
-| 4 | `V_AX_GRUPOS` | `grupo` | `grupos` | `(codi_ten, chavegrupo)` |
-| 5 | `V_AX_PRODUTOS` | `prodserv` | `produtos` | `(codi_ten, codi_psv)` |
-| 6 | `V_AX_CICLOS` | `ciclos_safra` | `ciclos` | `(codi_ten, codi_cic)` |
-| 7 | `V_AX_ESTOQUE` | `estoque` | `estoque` | `(codi_ten, codi_pro, codi_fil)` |
-| 8 | `V_AX_TABELA_PRECO` | `tabelas_preco` | `tabelas-preco` | `(codi_ten, erp_id)` |
-| 9 | `V_AX_ITABELA_PRECO` | `itens_tabela_preco` | `tabelas-preco` | `(codi_ten, erp_id, codi_pro)` |
-| 10 | `V_AX_CONDICAO` | `condicao` | `condicoes` | `(codi_ten, cond_con)` |
-
-> A **tabela de preço** (cabeçalho + itens) vai num **único endpoint**
-> (`tabelas-preco`): o servidor grava os cabeçalhos, resolve `erp_id → codi_tab`
-> e vincula os itens. Itens sem cabeçalho correspondente são reportados como
-> órfãos (o lote segue e o sync termina com exit 1).
-
-> `V_AX_SUBGRUPOS` foi **descontinuada**: o subgrupo passou a viver dentro de
-> `grupo` (coluna `desc_sbg`, chave `chavegrupo`).
-
----
-
-## Arquitetura
-
-```
-sync.py              ← Orquestrador: carrega config, abre conexões,
-                       itera as entidades (tabela de preço = header+itens)
-   │
-   ├─ oracle_reader.py   ← Lê dados das views Oracle (SELECT)
-   ├─ transformer.py     ← Aplica mapeamento De/Para + conversão de tipos
-   └─ api_writer.py      ← POST nos endpoints /api/v1/integracao/base/** (X-Api-Key)
-
-tables_spec.py       ← Fonte da verdade: views, tabelas destino,
-                       chaves UPSERT e mapeamento de colunas por tabela
-api_writer.py        ← Também mapeia entidade → slug do endpoint (ENTITY_TO_SLUG)
-
-config.py            ← Carrega e valida o .env
-logger.py            ← Log estruturado em arquivo (chave:valor por linha)
-```
-
-**Lógica de retry:**
-- Oracle: 1 retry após 5s em caso de timeout/falha de conexão
-- API: 1 retry após 5s em falha de rede/5xx/429; **401** (chave inválida)
-  interrompe o script imediatamente; erros de gravação (ex.: 422) num lote são
-  reportados e o sync segue (exit 1)
-
-**A escrita não usa mais `codi_ten`:** o tenant vem da `X-Api-Key`. A resolução
-`erp_id → codi_tab` da tabela de preço agora é feita no servidor.
-
-**Para adicionar ou alterar uma tabela**, edite `tables_spec.py` (colunas) e, se
-for entidade nova, `ENTITY_TO_SLUG` em `api_writer.py` (o endpoint correspondente
-precisa existir no AceleraX).
-
----
-
-## Testes
-
-```bash
-# Rodar todos os testes
-python -m pytest . --ignore=venv -v
-
-# Rodar um arquivo específico
-python -m pytest test_transformer.py -v
-
-# Rodar um teste pelo nome
-python -m pytest test_transformer.py::test_transform_renames_column_for_tabelas_preco -v
-```
-
-Os testes não precisam de Oracle nem da API no ar — todas as dependências externas (Oracle e o `requests`) são mockadas.
-
----
-
-## Log
-
-Formato de cada linha no `sync.log`:
-
-```
-[2026-05-31 14:23:45] TABLE:transac STATUS:start
-[2026-05-31 14:23:46] TABLE:transac STATUS:success ROWS_FETCHED:1250 ROWS_UPSERTED:1250
-[2026-05-31 14:24:10] LEVEL:ERROR TABLE:propried ERROR_TYPE:oracle_connection DETAIL:ORA-12170: timeout
-[2026-05-31 14:25:00] LEVEL:SUMMARY EXIT_CODE:1
-```
+- `CLAUDE.md` — arquitetura e comandos (guia de desenvolvimento).
+- `src/AceleraXSync/README.md` — detalhes da carga de base.
+- `src/AceleraXSync/consultas/README.md` — consultas por cliente (AgroSanta, Rural Forte).

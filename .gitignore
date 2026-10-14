@@ -138,3 +138,29 @@ docs/
 *.docx
 *.log
 sync.log
+
+# .NET build output
+bin/
+obj/
+
+# Pacotes de distribuicao (build.ps1 / Inno Setup)
+build/publish/
+build/publish-*/
+build/*.zip
+installer/Output/
+
+# Config por ambiente (API key / senha) e saidas do sync
+appsettings.Development.json
+appsettings.Production.json
+dump/
+logs/
+
+# DLL do ERP (versao do cliente, muda) e AGB.ini (aponta o Oracle do ERP do
+# cliente) - NAO versionar; sao colocados na maquina de build/instalacao.
+agb/*.dll
+agb/*.ini
+agb/*.bak
+agb/*.exe
+
+# AGB.ini e por cliente (conexao do ERP) - o operador coloca na agb\ do servidor
+agb/AGB.ini

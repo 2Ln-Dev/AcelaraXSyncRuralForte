@@ -1,0 +1,82 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AceleraXSync</RootNamespace>
+    <!-- Namespace/pasta internos continuam AceleraXSync; o que o cliente ve e' o nome do
+         produto: o executavel e o servico Windows chamam-se HubAceleraX (mesmo criterio do
+         HubUniSeeds: namespace HubPadrao.Api, produto Hub2LN). NAO usar "HubPadrao"/"Hub2LN"
+         aqui: ja' existe esse servico de outro produto na mesma maquina. -->
+    <AssemblyName>HubAceleraX</AssemblyName>
+    <Product>Hub AceleraX</Product>
+    <AssemblyTitle>Hub AceleraX</AssemblyTitle>
+    <Company>2LN Consultoria</Company>
+    <!-- x86 OBRIGATORIO: a DLL AGBPedidoVenda (gravacao de pedido no ERP) e' 32-bit
+         (Delphi), carregada in-process via P/Invoke, entao o processo TEM que ser x86
+         (senao WinError 193). O Oracle.ManagedDataAccess.Core e' 100% gerenciado e roda
+         em x86 sem Instant Client, entao a carga de base roda no mesmo processo x86. -->
+    <PlatformTarget>x86</PlatformTarget>
+    <!-- cp1252 (a DLL fala ANSI Brasil) + nao forcar invariant. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Versao final (Release): FORCA a licenca - a config e' fixada no binario
+       (#if LICENCA_OBRIGATORIA no Program.cs), como no HubUniSeeds. Em Debug a diretiva
+       nao existe -> vale o appsettings (dev sem licenca).
+       -p:SemLicenca=true publica em Release SEM a constante (escape temporario). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(SemLicenca)' != 'true'">
+    <DefineConstants>$(DefineConstants);LICENCA_OBRIGATORIA</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <!-- Driver Oracle 100% gerenciado (sem Instant Client). -->
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.6.1" />
+    <!-- Leitura do banco via Dapper (dinamica, Rows.D), mesmo padrao do HubUniSeeds. -->
+    <PackageReference Include="Dapper" Version="2.1.66" />
+    <!-- cp1252 (a DLL AGB fala ANSI Brasil); em .NET Core precisa do provider extra. -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+    <PackageReference Include="Serilog" Version="4.0.2" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <!-- Windows Event Log: SO' eventos importantes do servico (iniciou/parou/licenca/fatal). -->
+    <PackageReference Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+    <!-- Licenciamento 2LN (feed local 2ln-local no nuget.config). Usado headless via
+         LicenseState (o middleware HTTP UseAppLicensing NAO se aplica ao worker). -->
+  </ItemGroup>
+
+  <!-- -p:SemLicenca=true: build SEM o pacote 2LN.Licensing (Core/LicencaStub.cs no lugar,
+       sempre licenciado). Sem a flag: pacote real + stub fora da compilacao. -->
+  <ItemGroup Condition="'$(SemLicenca)' != 'true'">
+    <PackageReference Include="2LN.Licensing" Version="1.0.0" />
+    <Compile Remove="Core/LicencaStub.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 2LN.Licensing e' uma lib ASP.NET Core (FrameworkReference). Como este projeto e'
+         Sdk.Worker (nao Web), precisamos referenciar o framework p/ consumir o pacote. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Update="appsettings.Development.example.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- Consultas por cliente EMBUTIDAS no exe (recurso "consultas/<cliente>/<entidade>.sql"):
+       NAO vao para o disco do cliente. Sync:ConsultasDir escolhe o cliente (ex.: ruralforte). -->
+  <ItemGroup>
+    <None Remove="consultas\**" />
+    <EmbeddedResource Include="consultas\**\*.sql" LogicalName="consultas/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>
