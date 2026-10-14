@@ -59,8 +59,10 @@ public sealed class PedidoWorker : BackgroundService
             }
             catch (Exception e)
             {
-                EventoServico(LogLevel.Critical, e, "Nao foi possivel carregar a DLL - encerrando o servico.");
-                _lifetime.StopApplication();
+                // Servico UNIFICADO: a falha da DLL NAO derruba o host (mataria a carga de
+                // base). Loga critico e DESLIGA so' o worker de PEDIDOS; a carga de base segue.
+                // O operador corrige a DLL/AGB.ini e reinicia o servico.
+                EventoServico(LogLevel.Critical, e, "Nao foi possivel carregar a DLL AGB - worker de PEDIDOS desligado (a carga de base continua). Corrija a DLL/AGB.ini e reinicie o servico.");
                 return;
             }
         }
@@ -73,11 +75,13 @@ public sealed class PedidoWorker : BackgroundService
         // default do run.py Python (loop era opt-in).
         if (_opt.RunOnce)
         {
-            if (LicencaBloqueada()) { _lifetime.StopApplication(); return; }
+            // Servico UNIFICADO: o one-shot de pedidos NAO encerra o host (co-hospeda a carga
+            // de base). Faz a rodada e retorna; quem controla o fim do processo e' a carga de
+            // base no modo DryRun.
+            if (LicencaBloqueada()) return;
             try { await RodadaAsync(stoppingToken); }
             catch (ApiAuthException e) { _log.LogCritical(e, "401 na API AceleraX."); }
             catch (Exception e) { _log.LogError(e, "Falha na rodada one-shot."); }
-            _lifetime.StopApplication();
             return;
         }
 
@@ -113,8 +117,9 @@ public sealed class PedidoWorker : BackgroundService
                 }
                 catch (ApiAuthException e)
                 {
-                    _log.LogCritical(e, "401 na API AceleraX â€” encerrando o servico.");
-                    _lifetime.StopApplication();
+                    // Servico UNIFICADO: 401 do lado pedido desliga so' este worker (a carga
+                    // de base tem a propria chave/auth e segue). Nao derruba o host.
+                    EventoServico(LogLevel.Critical, e, "401 na API AceleraX (pedidos) - worker de PEDIDOS desligado (a carga de base continua). Confira a X-Api-Key.");
                     return;
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

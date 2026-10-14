@@ -137,6 +137,11 @@ public static class TablesSpec
                 // entao o sync NAO precisa mandar codi_gpr.
                 C("CHAVEGRUPO", "chavegrupo"),
                 C("SITU_PSV", "situ_psv"),
+                // Controle de lote do ERP (PRODUTO.LTOB_PRO): 1=No Pedido, 2=No Faturamento,
+                // 4=Na Expedicao, 9=Nao Obrigatorio (vazio/null = nao controla). O app usa
+                // '1' para avisar o vendedor ao lancar o produto (web e mobile). SoConsulta:
+                // a view V_AX_PRODUTOS do cliente original nao tem essa coluna.
+                SoConsulta("LTOB_PRO", "ltob_pro"),
             }),
 
             ["ciclos_safra"] = new("AGROINSU.V_AX_CICLOS", "ciclos", new[]

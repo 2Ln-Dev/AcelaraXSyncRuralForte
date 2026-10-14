@@ -7,13 +7,19 @@
 -- (cadastro lixo, ex.: 0002890) fica de fora.
 -- ESCOPO: grupos 49/50/71 fora (ver grupo.sql). Produto SEM grupo tambem fica fora
 -- (NOT IN com NULL) — sao cadastros antigos, quase todos inativos.
+--
+-- LTOB_PRO (PRODUTO): controle de lote — 1=No Pedido, 2=No Faturamento, 4=Na Expedicao,
+-- 9=Nao Obrigatorio (vazio/null = nao controla). O app avisa o vendedor quando '1' (lote
+-- obrigatorio no pedido). LEFT JOIN: produto/servico sem linha em PRODUTO fica NULL.
 SELECT ps.CODI_PSV,
        ps.DESC_PSV,
        ps.UNID_PSV,
        ps.COMP_PSV,
        CASE WHEN ps.CODI_GPR IS NOT NULL AND ps.CODI_SBG IS NOT NULL
             THEN ps.CODI_GPR || '#' || ps.CODI_SBG END AS CHAVEGRUPO,
-       ps.SITU_PSV
+       ps.SITU_PSV,
+       prd.LTOB_PRO AS LTOB_PRO
 FROM PRODSERV ps
+LEFT JOIN PRODUTO prd ON prd.CODI_PSV = ps.CODI_PSV
 WHERE ps.DESC_PSV IS NOT NULL
   AND ps.CODI_GPR NOT IN (49, 50, 71);
