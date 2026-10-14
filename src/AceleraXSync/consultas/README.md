@@ -62,17 +62,14 @@ Dados que vêm vazios do ERP, e por isso são aceitos vazios no app:
 - clientes: vendedor em 1.502 (cliente sem título a receber);
 - itens: embalagem em 260 e fabricante em 64.
 
-### Escopo definido pelo cliente (08/10/2026)
+### Escopo definido pelo cliente
 
-- **Filial 50 GERENCIAL fica fora**, em `empresa`, `estoque` e `carteira`. O filtro não vale
-  para `vendedor`.
+- **Todas as filiais ativas entram, inclusive a 50 (GERENCIAL).** O recorte é por GRUPO
+  de produto, não por filial. (Correção 13/10/2026: antes a 50 estava fora por engano —
+  o "50" que fica de fora é o GRUPO 50 IMOBILIZADO, não a filial 50.)
 - **Grupos fora: `CODI_GPR NOT IN (49, 50, 71)`**, ou seja, 49 MATERIAL CONSUMO (uso e
   consumo), 50 IMOBILIZADO e 71 SERVICOS. O filtro vai em `grupo`, `prodserv`, `estoque`,
   `itens_tabela_preco` e `carteira`. Produto sem grupo também fica fora.
-
-Depois do escopo, no TREINO: 3 filiais, 94 grupos, 8.287 produtos (2.398 ativos),
-16 tabelas e 15.949 itens, carteira com 155 itens (48 s) e estoque com 7.182 linhas
-(2.394 por filial, 9,2 min).
 
 ### Ainda em aberto
 

@@ -11,7 +11,7 @@
 -- SUM(ESTOQUE) e' a forma como o HUB le a SALDO_INICIAL (EstoqueModule.cs).
 --
 -- CUSTO: ~0,06 s por linha na Rural (TREINO: 9.625 linhas em 9,4 min, antes do escopo).
--- ESCOPO: filial 50 fora (ver empresa.sql) e grupos 49/50/71 fora (ver grupo.sql).
+-- ESCOPO: todas as filiais ativas (inclui a 50); grupos 49/50/71 fora (ver grupo.sql).
 SELECT CODI_EMP, CODI_PSV, DESC_PSV, QTE1_PRO, QTE2_PRO, VALOR_UNIT,
        EF, RDE, PCNR, PVNE, CF, VF, MT,
        (EF + PCNR - PVNE + RDE) AS DISPONIVEL
@@ -33,6 +33,5 @@ FROM (
   INNER JOIN CADEMP C   ON C.CODI_EMP = D.CODI_EMP AND C.SITU_EMP = 'A'
   LEFT JOIN PRODUTO PR  ON PR.CODI_PSV = PSV.CODI_PSV
   WHERE PSV.SITU_PSV = 'A'
-    AND C.CODI_EMP <> 50
     AND PSV.CODI_GPR NOT IN (49, 50, 71)
 );

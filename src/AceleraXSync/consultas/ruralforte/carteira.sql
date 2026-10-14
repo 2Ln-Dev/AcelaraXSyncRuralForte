@@ -10,7 +10,7 @@
 --  CODI_TOP <> 38. Nao se aplica aqui.)
 -- QTDE_ENTR_PED_VEN roda UMA vez por item (inline view + NO_MERGE), como no HUB.
 -- EF_GLOBAL / EF_LOJA = 0 (estoque do item na carteira fora do escopo, como na AgroSanta).
--- ESCOPO: filial 50 fora (ver empresa.sql) e grupos 49/50/71 fora (ver grupo.sql).
+-- ESCOPO: todas as filiais (inclui a 50); grupos 49/50/71 fora (ver grupo.sql).
 SELECT ORIGEM_ERP_ID, CODI_EMP, PEDIDO, CODI_TRA, PROP_PRO, CODI_PES, CODI_PSV, CODI_CIC,
        QTDE,
        (QTDE - SALDO)  AS ENTREGUE,
@@ -44,7 +44,6 @@ FROM (
     WHERE PED.SITU_PED NOT IN ('9')
       AND PED.TFAT_PED IN ('1', '3')
       AND IPE.CODI_PSV IS NOT NULL
-      AND PED.CODI_EMP <> 50
       AND PD.CODI_GPR NOT IN (49, 50, 71)
   )
 )
