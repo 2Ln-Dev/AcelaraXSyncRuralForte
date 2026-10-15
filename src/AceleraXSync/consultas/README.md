@@ -59,7 +59,9 @@ Agora sai `NULL`, e a linha sem descrição foi filtrada.
 
 Dados que vêm vazios do ERP, e por isso são aceitos vazios no app:
 - carteira: safra em 150 de 167 itens e propriedade em 22;
-- clientes: vendedor em 1.502 (cliente sem título a receber);
+- clientes: vendedor em 1.502 (cliente sem título a receber — regra antiga). Desde 15/10/2026
+  o vendedor vem só de `VENDEDORCLI.COD1_PES`: em RURALF, 983 de 4.112 clientes têm vendedor;
+  cliente fora da carteira fica sem vendedor (decisão do cliente);
 - itens: embalagem em 260 e fabricante em 64.
 
 ### Escopo definido pelo cliente
