@@ -59,6 +59,8 @@ public static class TablesSpec
         "itens_tabela_preco",
         "condicao",
         "condicoes_categoria",
+        "vcto_fixo_safra",
+        "vcto_fixo_mensal",
         "carteira",
     };
 
@@ -247,6 +249,35 @@ public static class TablesSpec
                 // Pre-financeiro do pedido (migracao 086 do app): conta e tipo de documento.
                 SoConsulta("CODI_CON", "conta_con"),
                 SoConsulta("CODI_TDO", "tdoc_con"),
+                // Vencimento fixo (migracao 095 do app): VEFX_CON e o tipo (VENCIMENTOFIXO.PERI_VFX).
+                SoConsulta("VEFX_CON", "vefx_con"),
+                SoConsulta("PERI_VFX", "peri_vfx"),
+            }),
+
+            // Vencimento fixo da condicao (ERP: VCTOFIXOSAFRA / VCTOFIXOMENSAL). So' no modo
+            // consulta. Upsert pela chave no app (migracao 095; regra em
+            // lib/motor/vencimento-fixo.ts do app).
+            ["vcto_fixo_safra"] = new(null, "vencimentos-fixos-safra", new[]
+            {
+                C("CODI_VFS", "codi_vfs"),
+                C("COND_CON", "cond_con"),
+                C("INIC_VFS", "inic_vfs"),
+                C("FINA_VFS", "fina_vfs"),
+                C("DVEN_VFS", "dven_vfs"),
+                C("QPAR_VFS", "qpar_vfs"),
+                C("MANO_VFS", "mano_vfs"),
+                C("CODI_TDO", "tdoc_vfs"),
+            }),
+
+            ["vcto_fixo_mensal"] = new(null, "vencimentos-fixos-mensal", new[]
+            {
+                C("COND_CON", "cond_con"),
+                C("INIC_VFM", "inic_vfm"),
+                C("FINA_VFM", "fina_vfm"),
+                C("DVEN_VFM", "dven_vfm"),
+                C("QPAR_VFM", "qpar_vfm"),
+                C("PVEN_VFM", "pven_vfm"),
+                C("CODI_TDO", "tdoc_vfm"),
             }),
 
             // De/para categoria de cliente x condicao de pagamento (ERP: CATEGCLICOND).

@@ -10,7 +10,8 @@ Sem `ConsultasDir`, o sync lê as views `V_AX_*` do cliente original (Agroinsumo
 
 - **Nome do arquivo = nome da entidade** em `Sync/TablesSpec.cs`: `empresa`, `vendedor`,
   `categorias`, `transac`, `propried`, `grupo`, `prodserv`, `ciclos_safra`, `estoque`,
-  `tabelas_preco`, `itens_tabela_preco`, `condicao`, `carteira`.
+  `tabelas_preco`, `itens_tabela_preco`, `condicao`, `condicoes_categoria`,
+  `vcto_fixo_safra`, `vcto_fixo_mensal` (vencimento fixo da condição), `carteira`.
 - **Sem arquivo = entidade fora da carga** desse cliente (o log mostra `status=pulada`).
   Arquivo com nome que não é entidade gera aviso no início.
 - **Os apelidos das colunas são o contrato** (coluna Oracle do De/Para em `TablesSpec.cs`).
