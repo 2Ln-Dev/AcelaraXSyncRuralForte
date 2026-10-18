@@ -23,6 +23,7 @@ public sealed class PedidoWorker : BackgroundService
 {
     private readonly AceleraClient _acelera;
     private readonly DllBridge _dll;
+    private readonly OrigemPedidoErp _origem;
     private readonly AgendaService _agenda;
     private readonly PedidoOptions _opt;
     private readonly IHostApplicationLifetime _lifetime;
@@ -33,6 +34,7 @@ public sealed class PedidoWorker : BackgroundService
     public PedidoWorker(
         AceleraClient acelera,
         DllBridge dll,
+        OrigemPedidoErp origem,
         AgendaService agenda,
         IOptions<PedidoOptions> opt,
         IHostApplicationLifetime lifetime,
@@ -41,6 +43,7 @@ public sealed class PedidoWorker : BackgroundService
     {
         _acelera = acelera;
         _dll = dll;
+        _origem = origem;
         _agenda = agenda;
         _opt = opt.Value;
         _lifetime = lifetime;
@@ -304,6 +307,9 @@ public sealed class PedidoWorker : BackgroundService
 
         if (resp.Sucesso)
         {
+            // A DLL marca o pedido como gerado pela SiagriApi (ORIG_PED = 'S'): tira a marca.
+            await _origem.LimparAsync(p.CodiPed, payload, resp.NumeroPedido, ct);
+
             // GUARDA de idempotencia: a partir daqui o pedido JA ESTA no ERP. Se o /integrar
             // falhar, e' TRANSITORIO (nunca ERR) â€” a proxima rodada da RNRPO002 e confirma.
             try

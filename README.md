@@ -17,6 +17,12 @@ processo:
 > outro produto. Os dois podem conviver na mesma máquina. Por dentro, o namespace/pasta é
 > `AceleraXSync` (como o HubUniSeeds mantém `HubPadrao.Api` e só o produto vira `Hub2LN`).
 
+> **Origem do pedido no ERP:** a DLL grava `PEDIDO.ORIG_PED = 'S'` ("SiagriApi" no
+> dicionário RBCAMPO: M-Mobile, 1-AFV Manager, P-PR VENDA, S-SiagriApi). Logo depois de gravar,
+> o worker limpa o campo (`ORIG_PED = NULL`, como no pedido digitado no ERP) pela chave
+> `CODI_EMP` + `SERI_PED` + `PEDI_PED` (`Pedidos/OrigemPedidoErp.cs`). Se a limpeza falhar, só
+> loga aviso: o pedido já está no ERP e segue integrado.
+
 > **Autenticação:** header `X-Api-Key` (uma por tenant). O `codi_ten` é resolvido no
 > servidor a partir da chave — o sync não envia tenant e não usa credencial de banco do app.
 

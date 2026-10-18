@@ -93,6 +93,7 @@ builder.Services.AddHttpClient<AceleraClient>();
 // Agenda por entidade (tela Integracao ERP do AceleraX), usada pelos DOIS workers.
 builder.Services.AddSingleton<AgendaService>();
 builder.Services.AddSingleton<DllBridge>();
+builder.Services.AddSingleton<OrigemPedidoErp>();
 builder.Services.AddHostedService<PedidoWorker>();
 
 var host = builder.Build();
