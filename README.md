@@ -28,6 +28,11 @@ processo:
 > vendedor do pedido: `CADUSU.CODI_USU` com `CODI_PES = codigoVendedor1` (`Pedidos/UsuarioPedidoErp.cs`).
 > Vendedor sem login no `CADUSU` mantém o usuário do AceleraX e gera aviso no log.
 
+> **Situação do pedido no AceleraX:** o `SituacaoPedidoWorker` segue a agenda `pedidos_situacao`
+> do AceleraX: lista os pedidos já integrados (`GET /pedidos/integrados`, últimos `Pedido:SituacaoDias`
+> dias, padrão 180), lê `PEDIDO.SITU_PED` pela chave `CODI_EMP` + `SERI_PED` + `PEDI_PED` e manda só os
+> que mudaram (`POST /pedidos/situacao`): 0 Não liberado, 1 Liberado, 5 Confirmado, 9 Cancelado.
+
 > **Autenticação:** header `X-Api-Key` (uma por tenant). O `codi_ten` é resolvido no
 > servidor a partir da chave — o sync não envia tenant e não usa credencial de banco do app.
 

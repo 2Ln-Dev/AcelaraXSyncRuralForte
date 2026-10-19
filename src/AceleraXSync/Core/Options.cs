@@ -94,4 +94,7 @@ public sealed class PedidoOptions
     public bool SkipDll { get; set; }
     /// <summary>Teste: processa somente este codi_ped (mira 1 pedido).</summary>
     public string? Somente { get; set; }
+    /// <summary>Situacao dos pedidos no ERP: so' confere os integrados ha' ate' N dias
+    /// (pedido antigo ja' nao muda). null/0 = todos.</summary>
+    public int? SituacaoDias { get; set; } = 180;
 }

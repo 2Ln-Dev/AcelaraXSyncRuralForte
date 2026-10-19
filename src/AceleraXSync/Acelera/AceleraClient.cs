@@ -35,6 +35,13 @@ public sealed class ApiException : Exception
 /// sincronizacao e' null (la' todos sao barter por construcao).</summary>
 public sealed record PedidoResumo(string CodiPed, string? Origem, string? TipoPed = null);
 
+/// <summary>Pedido ja' integrado (GET /pedidos/integrados): chave do pedido no ERP
+/// (CODI_EMP + SERI_PED + PEDI_PED) e a situacao que o AceleraX ja' tem gravada.</summary>
+public sealed record PedidoIntegrado(string CodiPed, long NumeroErp, long? Empresa, string Serie, string? Situacao);
+
+/// <summary>Situacao do pedido no ERP para o POST /pedidos/situacao.</summary>
+public sealed record SituacaoPedido(string CodiPed, string Situacao, string? Descricao);
+
 /// <summary>Detalhe de UMA tentativa para o historico do AceleraX (pedidos_integracao_log):
 /// JSON enviado a DLL e resposta crua. Vai junto em /integrar, /erro e /log.</summary>
 public sealed record Tentativa(JsonObject? Payload, string? Resposta)
@@ -139,6 +146,44 @@ public sealed class AceleraClient
         var body = new JsonObject { ["tipo_erro"] = tipoErro, ["mensagem"] = mensagem };
         tentativa?.Preencher(body);
         await SendAsync(HttpMethod.Post, path, body, ct);
+    }
+
+    /// <summary>Pedidos ja' integrados ao ERP (GET /pedidos/integrados), com a chave no ERP.
+    /// <paramref name="dias"/> limita pela data da integracao.</summary>
+    public async Task<IReadOnlyList<PedidoIntegrado>> ListarIntegradosAsync(int? dias, CancellationToken ct)
+    {
+        var path = "api/v1/integracao/pedidos/integrados";
+        if (dias is > 0) path += "?dias=" + dias.Value;
+        var data = await SendAsync(HttpMethod.Get, path, null, ct);
+
+        var lista = new List<PedidoIntegrado>();
+        foreach (var it in data?["items"]?.AsArray() ?? new JsonArray())
+        {
+            var codi = it?["codi_ped"]?.ToString();
+            if (string.IsNullOrEmpty(codi)
+                || !long.TryParse(it!["numero_erp"]?.ToString(), out var numero)) continue;
+            long? emp = long.TryParse(it["codigo_empresa"]?.ToString(), out var e) ? e : null;
+            var situ = it["situacao"]?.ToString();
+            lista.Add(new PedidoIntegrado(codi, numero, emp, it["serie"]?.ToString() ?? "1",
+                string.IsNullOrWhiteSpace(situ) ? null : situ.Trim()));
+        }
+        return lista;
+    }
+
+    /// <summary>Grava a situacao dos pedidos no ERP (POST /pedidos/situacao), ate' 500 por chamada.
+    /// Devolve quantos o AceleraX atualizou.</summary>
+    public async Task<int> EnviarSituacaoAsync(IReadOnlyList<SituacaoPedido> itens, CancellationToken ct)
+    {
+        var total = 0;
+        foreach (var lote in itens.Chunk(500))
+        {
+            var arr = new JsonArray();
+            foreach (var s in lote)
+                arr.Add(new JsonObject { ["codi_ped"] = s.CodiPed, ["situacao"] = s.Situacao, ["descricao"] = s.Descricao });
+            var data = await SendAsync(HttpMethod.Post, "api/v1/integracao/pedidos/situacao", new JsonObject { ["itens"] = arr }, ct);
+            total += int.TryParse(data?["atualizados"]?.ToString(), out var n) ? n : 0;
+        }
+        return total;
     }
 
     /// <summary>Agenda da sincronizacao por entidade (GET /agenda), configurada na tela do AceleraX.</summary>

@@ -96,6 +96,7 @@ builder.Services.AddSingleton<DllBridge>();
 builder.Services.AddSingleton<OrigemPedidoErp>();
 builder.Services.AddSingleton<UsuarioPedidoErp>();
 builder.Services.AddHostedService<PedidoWorker>();
+builder.Services.AddHostedService<SituacaoPedidoWorker>();
 
 var host = builder.Build();
 
