@@ -23,6 +23,11 @@ processo:
 > `CODI_EMP` + `SERI_PED` + `PEDI_PED` (`Pedidos/OrigemPedidoErp.cs`). Se a limpeza falhar, só
 > loga aviso: o pedido já está no ERP e segue integrado.
 
+> **Usuário do pedido no ERP:** a DLL grava `PEDIDO.CODI_USU` com o `usuarioInclusaoCancelamento`
+> do payload, que o AceleraX manda fixo `ADM`. Antes de chamar a DLL, o worker troca pelo login do
+> vendedor do pedido: `CADUSU.CODI_USU` com `CODI_PES = codigoVendedor1` (`Pedidos/UsuarioPedidoErp.cs`).
+> Vendedor sem login no `CADUSU` mantém o usuário do AceleraX e gera aviso no log.
+
 > **Autenticação:** header `X-Api-Key` (uma por tenant). O `codi_ten` é resolvido no
 > servidor a partir da chave — o sync não envia tenant e não usa credencial de banco do app.
 

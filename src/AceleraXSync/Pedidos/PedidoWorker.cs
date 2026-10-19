@@ -24,6 +24,7 @@ public sealed class PedidoWorker : BackgroundService
     private readonly AceleraClient _acelera;
     private readonly DllBridge _dll;
     private readonly OrigemPedidoErp _origem;
+    private readonly UsuarioPedidoErp _usuario;
     private readonly AgendaService _agenda;
     private readonly PedidoOptions _opt;
     private readonly IHostApplicationLifetime _lifetime;
@@ -35,6 +36,7 @@ public sealed class PedidoWorker : BackgroundService
         AceleraClient acelera,
         DllBridge dll,
         OrigemPedidoErp origem,
+        UsuarioPedidoErp usuario,
         AgendaService agenda,
         IOptions<PedidoOptions> opt,
         IHostApplicationLifetime lifetime,
@@ -44,6 +46,7 @@ public sealed class PedidoWorker : BackgroundService
         _acelera = acelera;
         _dll = dll;
         _origem = origem;
+        _usuario = usuario;
         _agenda = agenda;
         _opt = opt.Value;
         _lifetime = lifetime;
@@ -301,7 +304,8 @@ public sealed class PedidoWorker : BackgroundService
             return Desfecho.Transitorio;
         }
 
-        // 2) DLL
+        // 2) DLL, com o usuario do vendedor do pedido (o AceleraX manda 'ADM' fixo).
+        await _usuario.AplicarAsync(p.CodiPed, payload, ct);
         var resp = _dll.Incluir(payload);
         var tentativa = new Tentativa(payload, resp.Bruto);
 

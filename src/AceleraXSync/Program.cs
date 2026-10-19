@@ -94,6 +94,7 @@ builder.Services.AddHttpClient<AceleraClient>();
 builder.Services.AddSingleton<AgendaService>();
 builder.Services.AddSingleton<DllBridge>();
 builder.Services.AddSingleton<OrigemPedidoErp>();
+builder.Services.AddSingleton<UsuarioPedidoErp>();
 builder.Services.AddHostedService<PedidoWorker>();
 
 var host = builder.Build();
