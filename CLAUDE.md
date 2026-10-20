@@ -29,12 +29,14 @@ pwsh build/build.ps1 -Version 1.0.0 -SkipInstaller
 ## Serviço único: HubAceleraX (x86)
 
 Um projeto (`src/AceleraXSync`) → um exe `HubAceleraX.exe` → um Windows Service
-`HubAceleraX`, que hospeda **dois workers** no mesmo processo:
+`HubAceleraX`, que hospeda **os workers** no mesmo processo:
 
 | Worker | Arquivo | Fluxo |
 |---|---|---|
 | `BaseSyncWorker` | `Sync/BaseSyncWorker.cs` | **Carga de base**: ERP Oracle → API AceleraX (`POST /api/v1/integracao/base/<slug>`). |
 | `PedidoWorker` | `Pedidos/PedidoWorker.cs` | **Pedidos**: AceleraX → ERP, via DLL `agb/AGBPedidoVenda.dll`. |
+| `SituacaoPedidoWorker` | `Pedidos/SituacaoPedidoWorker.cs` | Situação do pedido no ERP → AceleraX (agenda `pedidos_situacao`). |
+| `EsteiraWorker` | `Esteira/EsteiraWorker.cs` + `EsteiraSync.cs` | **Esteira de faturamento do HUB 2LN** (agenda `esteira`; sem ela, `Esteira:IntervaloFixoSegundos`). Só TRANSPORTE: Solicitações de Faturamento do AceleraX → `APEX_EST_AX_ENTRADA`; `integrar` quando o HUB já criou os cards (`APEX_EST_AX_SOL.MARCADA_AX='N'` → 'S'/'E'); fases de `APEX_EST_AX_SAIDA` → `POST /solicitacoes/:id/status`, em ordem. As tabelas são do HUB (docs/esteira-faturamento do HUB); regra da esteira NÃO entra aqui. |
 
 **x86 obrigatório:** a DLL AGB é 32-bit (P/Invoke in-process) → o processo tem que ser x86.
 O Oracle gerenciado roda em x86, então a carga de base roda no mesmo processo.

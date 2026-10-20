@@ -60,6 +60,7 @@ builder.Services.Configure<OracleOptions>(builder.Configuration.GetSection("Orac
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection("Sync"));
 builder.Services.Configure<DllOptions>(builder.Configuration.GetSection("Dll"));
 builder.Services.Configure<PedidoOptions>(builder.Configuration.GetSection("Pedido"));
+builder.Services.Configure<EsteiraOptions>(builder.Configuration.GetSection("Esteira"));
 
 // --- Licenciamento (pacote 2LN.Licensing) ---------------------------------
 #if LICENCA_OBRIGATORIA
@@ -97,6 +98,10 @@ builder.Services.AddSingleton<OrigemPedidoErp>();
 builder.Services.AddSingleton<UsuarioPedidoErp>();
 builder.Services.AddHostedService<PedidoWorker>();
 builder.Services.AddHostedService<SituacaoPedidoWorker>();
+
+// Esteira de faturamento do HUB 2LN: Solicitacoes de Faturamento AceleraX <-> tabelas de passagem APEX_EST_AX_*
+// (o HUB aplica as regras; aqui so' o transporte). Agenda "esteira" do AceleraX.
+builder.Services.AddHostedService<AceleraXSync.Esteira.EsteiraWorker>();
 
 var host = builder.Build();
 

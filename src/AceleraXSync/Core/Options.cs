@@ -98,3 +98,18 @@ public sealed class PedidoOptions
     /// (pedido antigo ja' nao muda). null/0 = todos.</summary>
     public int? SituacaoDias { get; set; } = 180;
 }
+
+/// <summary>
+/// Esteira de faturamento do HUB 2LN (Esteira/EsteiraWorker): transporte das Solicitacoes de Faturamento entre o
+/// AceleraX e as tabelas de passagem APEX_EST_AX_* (criadas pelo HUB). A frequencia vem da agenda do AceleraX
+/// (entidade "esteira"); sem agenda, vale o intervalo fixo.
+/// </summary>
+public sealed class EsteiraOptions
+{
+    /// <summary>false = worker desligado (cliente sem a esteira do HUB).</summary>
+    public bool Ativo { get; set; } = true;
+    /// <summary>Intervalo FIXO — so' vale enquanto a agenda do AceleraX nao puder ser lida ou nao tiver a entidade.</summary>
+    public int IntervaloFixoSegundos { get; set; } = 300;
+    /// <summary>Tentativas de envio de UMA fase recusada pelo AceleraX (4xx) antes de virar ERRO.</summary>
+    public int MaxTentativas { get; set; } = 5;
+}

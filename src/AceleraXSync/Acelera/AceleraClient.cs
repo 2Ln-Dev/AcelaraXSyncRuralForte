@@ -42,6 +42,14 @@ public sealed record PedidoIntegrado(string CodiPed, long NumeroErp, long? Empre
 /// <summary>Situacao do pedido no ERP para o POST /pedidos/situacao.</summary>
 public sealed record SituacaoPedido(string CodiPed, string Situacao, string? Descricao);
 
+/// <summary>Solicitacao de Faturamento da carteira ainda nao descida para a esteira (GET /solicitacoes).</summary>
+public sealed record SolicitacaoResumo(string CodiSol, string? NconSol);
+
+/// <summary>Um item do payload da solicitacao (GET /solicitacoes/:id) — o "SolicitacaoIn" da esteira.</summary>
+public sealed record SolicitacaoItem(
+    string? OrigemErpId, string? Produto, decimal Qtde, string? TipoTransporte, string? TipoPrioridade,
+    DateTime? DataProgramada, string? Observacao);
+
 /// <summary>Detalhe de UMA tentativa para o historico do AceleraX (pedidos_integracao_log):
 /// JSON enviado a DLL e resposta crua. Vai junto em /integrar, /erro e /log.</summary>
 public sealed record Tentativa(JsonObject? Payload, string? Resposta)
@@ -223,6 +231,50 @@ public sealed class AceleraClient
         tentativa?.Preencher(body);
         await SendAsync(HttpMethod.Post, path, body, ct);
     }
+
+    // ── Esteira de faturamento (HUB 2LN) — Solicitacoes de Faturamento da carteira ──
+
+    /// <summary>Solicitacoes da carteira ainda nao integradas (GET /integracao/solicitacoes).</summary>
+    public async Task<IReadOnlyList<SolicitacaoResumo>> ListarSolicitacoesAsync(CancellationToken ct)
+    {
+        var data = await SendAsync(HttpMethod.Get, "api/v1/integracao/solicitacoes", null, ct);
+        var lista = new List<SolicitacaoResumo>();
+        foreach (var it in data as JsonArray ?? new JsonArray())
+        {
+            var codi = it?["codi_sol"]?.ToString();
+            if (string.IsNullOrEmpty(codi)) continue;
+            lista.Add(new SolicitacaoResumo(codi, it!["ncon_sol"]?.ToString()));
+        }
+        return lista;
+    }
+
+    /// <summary>Itens da solicitacao, um por item de pedido (GET /integracao/solicitacoes/:id).</summary>
+    public async Task<(string? Ncon, IReadOnlyList<SolicitacaoItem> Itens)> ObterSolicitacaoAsync(string codiSol, CancellationToken ct)
+    {
+        var data = await SendAsync(HttpMethod.Get, $"api/v1/integracao/solicitacoes/{Uri.EscapeDataString(codiSol)}", null, ct);
+        var itens = new List<SolicitacaoItem>();
+        foreach (var it in data?["itens"] as JsonArray ?? new JsonArray())
+        {
+            if (it is null) continue;
+            var qtde = decimal.TryParse(it["qtde_para_faturar"]?.ToString(), System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var q) ? q : 0;
+            DateTime? dt = DateTime.TryParse(it["data_programada"]?.ToString(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeLocal, out var d) ? d.Date : null;
+            itens.Add(new SolicitacaoItem(it["origem_erp_id"]?.ToString(), it["produto"]?.ToString(), qtde,
+                it["tipo_transporte"]?.ToString(), it["tipo_prioridade"]?.ToString(), dt, it["observacao"]?.ToString()));
+        }
+        return (data?["ncon_sol"]?.ToString(), itens);
+    }
+
+    /// <summary>Marca a solicitacao como descida para a esteira (idempotente no servidor).</summary>
+    public Task MarcarSolicitacaoIntegradaAsync(string codiSol, string? numeroErp, CancellationToken ct) =>
+        SendAsync(HttpMethod.Post, $"api/v1/integracao/solicitacoes/{Uri.EscapeDataString(codiSol)}/integrar",
+            new JsonObject { ["numero_erp"] = numeroErp }, ct);
+
+    /// <summary>Informa a etapa da solicitacao (2..9, ou 10 = declinada, com motivo). Idempotente no servidor.</summary>
+    public Task EnviarFaseSolicitacaoAsync(string codiSol, int status, string? motivo, string? setor, CancellationToken ct) =>
+        SendAsync(HttpMethod.Post, $"api/v1/integracao/solicitacoes/{Uri.EscapeDataString(codiSol)}/status",
+            new JsonObject { ["status"] = status, ["motivo"] = motivo, ["setor"] = setor }, ct);
 
     // Devolve o objeto `data` da resposta padrao { data }. 1 retry (5s) em rede/5xx/429.
     private async Task<JsonNode?> SendAsync(HttpMethod method, string path, JsonNode? json, CancellationToken ct)
