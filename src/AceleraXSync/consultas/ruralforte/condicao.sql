@@ -11,6 +11,10 @@
 -- (pedidoVendaParcelasList) — colunas conta_con/tdoc_con, migracao 086 do app.
 -- VEFX_CON = 'S' (vencimento fixo) + PERI_VFX (VENCIMENTOFIXO: 'S' safra / 'M' mensal):
 -- o app ignora o PRAZ_CON e usa vcto_fixo_safra/vcto_fixo_mensal (migracao 095).
+-- FPGT_CON = formas de pagamento vinculadas (IFORMASPAGAMENTO.FPGT_IFP, '03;10'): a DLL
+-- recusa forma fora do vinculo (RFPG003). Vazio = sem restricao. O app escolhe uma
+-- vinculada e compativel com OPER_CON (migracao 097 do app). Oracle 11.2 nao tem
+-- LISTAGG(DISTINCT): o DISTINCT vai na subconsulta.
 SELECT con.COND_CON, con.DESC_CON, ind.CODI_IND, ind.DESC_IND, con.STAT_CON,
        con.TIPO_CON,
        con.PRAZ_CON,
@@ -21,7 +25,12 @@ SELECT con.COND_CON, con.DESC_CON, ind.CODI_IND, ind.DESC_IND, con.STAT_CON,
        TO_CHAR(con.CODI_CON) AS CODI_CON,
        TO_CHAR(con.CODI_TDO) AS CODI_TDO,
        con.VEFX_CON,
-       vfx.PERI_VFX
+       vfx.PERI_VFX,
+       (SELECT LISTAGG(f.FPGT, ';') WITHIN GROUP (ORDER BY f.FPGT)
+          FROM (SELECT DISTINCT ifp.COND_CON,
+                       LPAD(TRIM(TO_CHAR(ifp.FPGT_IFP)), 2, '0') AS FPGT
+                  FROM IFORMASPAGAMENTO ifp) f
+         WHERE f.COND_CON = con.COND_CON) AS FPGT_CON
 FROM CONDICAO con
 LEFT JOIN INDEXADOR ind ON ind.CODI_IND = con.CODI_IND
 LEFT JOIN VENCIMENTOFIXO vfx ON vfx.COND_CON = con.COND_CON

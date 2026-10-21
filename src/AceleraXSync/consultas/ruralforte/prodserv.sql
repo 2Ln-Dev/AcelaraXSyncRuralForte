@@ -11,6 +11,8 @@
 -- LTOB_PRO (PRODUTO): controle de lote — 1=No Pedido, 2=No Faturamento, 4=Na Expedicao,
 -- 9=Nao Obrigatorio (vazio/null = nao controla). O app avisa o vendedor quando '1' (lote
 -- obrigatorio no pedido). LEFT JOIN: produto/servico sem linha em PRODUTO fica NULL.
+-- QTDF_PRO (PRODUTO): 'S' = aceita quantidade fracionada (ex.: 7,8); senao o web/app
+-- arredonda a quantidade do item.
 SELECT ps.CODI_PSV,
        ps.DESC_PSV,
        ps.UNID_PSV,
@@ -18,7 +20,8 @@ SELECT ps.CODI_PSV,
        CASE WHEN ps.CODI_GPR IS NOT NULL AND ps.CODI_SBG IS NOT NULL
             THEN ps.CODI_GPR || '#' || ps.CODI_SBG END AS CHAVEGRUPO,
        ps.SITU_PSV,
-       prd.LTOB_PRO AS LTOB_PRO
+       prd.LTOB_PRO AS LTOB_PRO,
+       prd.QTDF_PRO AS QTDF_PRO
 FROM PRODSERV ps
 LEFT JOIN PRODUTO prd ON prd.CODI_PSV = ps.CODI_PSV
 WHERE ps.DESC_PSV IS NOT NULL

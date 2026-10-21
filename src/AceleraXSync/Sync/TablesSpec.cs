@@ -144,6 +144,9 @@ public static class TablesSpec
                 // '1' para avisar o vendedor ao lancar o produto (web e mobile). SoConsulta:
                 // a view V_AX_PRODUTOS do cliente original nao tem essa coluna.
                 SoConsulta("LTOB_PRO", "ltob_pro"),
+                // Quantidade fracionada (PRODUTO.QTDF_PRO): 'S' = aceita casas decimais na
+                // quantidade do item (ex.: 7,8); sem 'S' o web e o app arredondam.
+                SoConsulta("QTDF_PRO", "qtdf_pro"),
             }),
 
             ["ciclos_safra"] = new("AGROINSU.V_AX_CICLOS", "ciclos", new[]
@@ -252,6 +255,8 @@ public static class TablesSpec
                 // Vencimento fixo (migracao 095 do app): VEFX_CON e o tipo (VENCIMENTOFIXO.PERI_VFX).
                 SoConsulta("VEFX_CON", "vefx_con"),
                 SoConsulta("PERI_VFX", "peri_vfx"),
+                // Formas de pagamento vinculadas (IFORMASPAGAMENTO, '03;10') — migracao 097 do app.
+                SoConsulta("FPGT_CON", "fpgt_con"),
             }),
 
             // Vencimento fixo da condicao (ERP: VCTOFIXOSAFRA / VCTOFIXOMENSAL). So' no modo
