@@ -73,6 +73,11 @@ public static class TablesSpec
                 // IDEN_EMP (identificacao/nome, ex.: '01-SRR').
                 C("CODI_EMP", "codi_emp"),
                 C("IDEN_EMP", "iden_emp"),
+                // CFOP do pedido (migracao 101 do app): UF da filial e CFOP padrao dentro
+                // (PARAMGER.CFOP_PAR) / fora do estado (PARAMGERTRANSAC.CFOP_PRT).
+                SoConsulta("ESTA_MUN", "esta_mun"),
+                SoConsulta("CFOP_PAR", "cfop_par"),
+                SoConsulta("CFOP_PRT", "cfop_prt"),
             }),
 
             ["vendedor"] = new("AGROINSU.V_AX_VENDEDOR", "vendedores", new[]
